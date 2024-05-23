@@ -35,7 +35,7 @@ site_names = "site_ids_ct_82sites.txt"
 root_dir = "/braincharts"
 
     # Data file directory
-data_dir = "/braincharts/docs"
+data_dir = "/braincharts/baseline_data_folder"
 
     # Model directory
 out_dir = os.path.join(root_dir, "models", model_name)
