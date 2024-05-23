@@ -23,7 +23,7 @@ from pcntoolkit.util.utils import compute_MSLL, create_design_matrix
 from nm_utils import remove_bad_subjects, load_2d
 
 # Change directory to model folder
-os.chdir("H:/Pecans/Braincharts/braincharts/models/")
+os.chdir("/braincharts/models/")
   # life_span_57K_82sites model was unzipped manually
 
 # Choose pretrained model (trained on approx. N=57000 subjects with 82 sites)
@@ -476,12 +476,12 @@ os.chdir(out_dir)
 ! for i in *; do if [[ -e ${i}/Z_HC.txt ]]; then cp ${i}/Z_HC.txt deviation_scores_HC/${i}_Z_HC.txt; fi; done
 
 import shutil
-filenames = os.listdir('H:/Pecans/Braincharts/braincharts/models/lifespan_57K_82sites')
+filenames = os.listdir('/braincharts/models/lifespan_57K_82sites')
 for i in filenames:
     if os.path.exists(i + '/Z_HC.txt'):
         shutil.copy2(i + '/Z_HC.txt', 'deviation_scores_HC/' + i + '_Z_HC.txt')
 
-z_dir = "H:/Pecans/Braincharts/braincharts/models/" + model_name + "/deviation_scores_HC/"
+z_dir = "/braincharts/models/" + model_name + "/deviation_scores_HC/"
 filelist = [name for name in os.listdir(z_dir)]
 
 os.chdir(z_dir)
@@ -506,12 +506,12 @@ os.chdir(out_dir)
 ! for i in *; do if [[ -e ${i}/Z_Pt.txt ]]; then cp ${i}/Z_Pt.txt deviation_scores_Pt/${i}_Z_Pt.txt; fi; done
 
 import shutil
-filenames = os.listdir('H:/Pecans/Braincharts/braincharts/models/lifespan_57K_82sites')
+filenames = os.listdir('/braincharts/models/lifespan_57K_82sites')
 for i in filenames:
     if os.path.exists(i + '/Z_Pt.txt'):
         shutil.copy2(i + '/Z_Pt.txt', 'deviation_scores_Pt/' + i + '_Z_Pt.txt')
 
-z_dir = "H:/Pecans/Braincharts/braincharts/models/" + model_name + "/deviation_scores_Pt/"
+z_dir = "/braincharts/models/" + model_name + "/deviation_scores_Pt/"
 filelist = [name for name in os.listdir(z_dir)]
 
 
