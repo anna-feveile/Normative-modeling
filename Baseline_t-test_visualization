@@ -1,1 +1,204 @@
 
+            ### Mass univariate two sample t-test on deviation score maps ###
+#Import and install necessary libraries
+import os
+import pandas as pd
+
+! pip install statsmodels
+from scipy.stats import ttest_ind
+from statsmodels.stats import multitest
+
+#Change directories and load csv-files (output from normative modeling)
+os.chdir("/braincharts/models/lifespan_57K_82sites/deviation_scores_HC/")
+HC=pd.read_csv("Baseline_HC_deviation_scores.csv")
+
+os.chdir(/braincharts/models/lifespan_57K_82sites/deviation_scores_Pt/")
+Pt=pd.read_csv("Baseline_Pt_deviation_scores.csv")
+
+#Replace column names so they are identical for HC and Pt
+HC.columns = HC.columns.str.replace("_Z_HC", "_Z_predict", regex=True)
+Pt.columns = Pt.columns.str.replace("_Z_Pt", "_Z_predict", regex=True)
+
+#Select columns containing Z-scores
+HC_deviations = HC.loc[:, HC.columns.str.contains("Z_predict")]
+Pt_deviations = Pt.loc[:, Pt.columns.str.contains("Z_predict")]
+
+#Define the deviation score columns
+z_cols = Pt_deviations.columns
+
+#Create new df containing FDR, p-values and t-statistics
+pt_hc_pvals_z = pd.DataFrame(columns=["IDP","fdr_pval", "pval", "tstat"])
+#Loop t-test for all chosen columns and copy the t-test values
+# equal_var = false, as it is assumed that the variances may differ due to different sample sizes
+for index, column in enumerate(z_cols):
+    test = ttest_ind(Pt_deviations[column], HC_deviations[column], equal_var=False)
+    pt_hc_pvals_z.loc[index, 'pval'] = test.pvalue
+    pt_hc_pvals_z.loc[index, 'tstat'] = test.statistic
+    pt_hc_pvals_z.loc[index, 'IDP'] = column
+    
+# Correct for multitest
+pt_hc_fdr_z = multitest.fdrcorrection(pt_hc_pvals_z['pval'], alpha=0.05, method='indep', is_sorted=False)
+
+pt_hc_pvals_z["fdr_pval"] = pt_hc_fdr_z[1]
+
+# Create dataframe containing all t-test output for all IDPs with p-value < 0.05
+pt_hc_z_sig_diff = pt_hc_pvals_z.query('pval < 0.05')
+
+pt_hc_z_sig_diff.shape
+
+#Save results to csv and excel
+os.chdir("/braincharts/models/lifespan_57K_82sites/")
+pt_hc_z_sig_diff.to_csv("Ttest_BL_Z_results_sig_diff.csv")
+pt_hc_z_sig_diff.to_excel("/Final_results/Ttest_BL_Z_results.xlsx")
+
+
+            ### Mass univariate two-sample t-test on all brain measures ###
+#Load IDPs
+data_dir = "/braincharts/Pecans_FS_data"
+
+with open(os.path.join(data_dir, "P_phenotypes_ct_lh.txt")) as f:
+    idp_ids_lh = f.read().splitlines()
+with open(os.path.join(data_dir, "P_phenotypes_ct_rh.txt")) as f:
+    idp_ids_rh = f.read().splitlines()
+with open(os.path.join(data_dir, "P_phenotypes_sc.txt")) as f:
+    idp_ids_sc = f.read().splitlines()
+
+idp_ids = idp_ids_lh + idp_ids_rh + idp_ids_sc
+
+#Select columns containing IDPs
+HC_IDP = HC.loc[:, idp_ids]
+Pt_IDP = Pt.loc[:, idp_ids]
+
+#Select columns containing Z-scores
+IDP_cols = Pt_IDP.columns
+#Create new df containing FDR, p-values and t-statistics
+pt_hc_pvals_IDP = pd.DataFrame(columns=["IDP", "fdr_pval", "pval", "tstat"])
+#Loop t-test for all chosen columns and copy the t-test values
+# equal_var = false, as it is assumed that the variances may differ due to different sample sizes and higher variance in FEP patients
+for index, column in enumerate(IDP_cols):
+    test = ttest_ind(Pt_IDP[column], HC_IDP[column], equal_var=False)
+    pt_hc_pvals_IDP.loc[index, 'pval'] = test.pvalue
+    pt_hc_pvals_IDP.loc[index, 'tstat'] = test.statistic
+    pt_hc_pvals_IDP.loc[index, 'IDP'] = column
+
+# Correct for multitest
+pt_hc_fdr_IDP = multitest.fdrcorrection(pt_hc_pvals_IDP["pval"], alpha=0.05, method='indep', is_sorted=False)
+
+pt_hc_pvals_IDP["fdr_pval"] = pt_hc_fdr_IDP[1]
+
+# Create dataframe containing all t-test output for all IDPs with p-value < 0.05
+pt_hc_IDP_sig_diff = pt_hc_pvals_IDP.query("pval < 0.05")
+
+pt_hc_IDP_sig_diff.shape
+
+# Save results to csv and excel
+os.chdir("/braincharts/models/lifespan_57K_82sites/")
+pt_hc_IDP_sig_diff.to_csv("Ttest_BL_all_results_sig_diff.csv")
+pt_hc_IDP_sig_diff.to_excel("/Final_results/Ttest_BL_IDP_results.xlsx")
+
+
+            ### Plot results of t-test using Z-scores on spatial surface map ###
+! pip install nilearn
+from nilearn import plotting
+from matplotlib.colors import ListedColormap
+import numpy as np
+
+
+def prepare_destrieux_plotting(data, hemi, method='counts'):
+    """
+    Prepare data for ROI plotting using destrieux atlas
+    data = has to be pd.DataFrame with exactly one column
+    hemi = hemisphere 'r' or 'l'
+    method = counts/correlations/pvals 
+            - this is only relevant if there is an ROI missing, it will automatically fill the missing ROI with unsignificant value (0 for counts, 1 for p-values)
+            - counts/correlations = 0
+            - mean_Zdiff = 1
+    returns: return(data_mapping, view, fs_plot, fs_sulc)
+
+    Use: view = plotting.view_surf(fs_plot, data_mapping, threshold=None, symmetric_cmap=True, cmap='jet', bg_map=fs_sulc)
+    """
+    # packages
+    from nilearn import datasets
+    import nilearn.plotting as plotting
+
+    # load destrieux atlas
+    destrieux_atlas = datasets.fetch_atlas_surf_destrieux()
+    fsaverage = datasets.fetch_surf_fsaverage()
+
+    # pick hemi
+    if hemi == 'r':
+        atlas = destrieux_atlas['map_right']
+        filter_hemi = 'rh'
+        fs_plot = fsaverage.infl_right
+        fs_sulc = fsaverage.sulc_right
+    elif hemi == 'l':
+        atlas = destrieux_atlas['map_left']
+        filter_hemi = 'lh'
+        fs_plot = fsaverage.infl_left
+        fs_sulc = fsaverage.sulc_left
+    
+    # check wthther the values are on rows or in columns
+    if [True for i in data.columns if 'occipital' in i]:
+        data = data.transpose()
+    
+    # filter the hemisphere we need (if this does not work we assume we are only given one hemisphere)
+    data_hemi = data.loc[[i for i in data.index if filter_hemi in i]]
+    if data_hemi.shape[0] == 0:
+        data_hemi = data
+    
+
+    # check whether we are missing some ROIs
+    if data_hemi.shape[0] == len(destrieux_atlas['labels']):
+        # do nothing, we have all the ROIs
+        print('all ROIs present')
+    else: 
+        # run over all all labels and see whether the name exists    
+        str(destrieux_atlas['labels'][0]).split('\'')[1]
+        missing=np.zeros(len(destrieux_atlas['labels']))
+        position=np.zeros(len(destrieux_atlas['labels']))
+        for i, imotif in enumerate(destrieux_atlas['labels']): 
+            jmotif = str(imotif).split('\'')[1]
+            
+            # change _and_ for &
+            if '_and_' in jmotif:
+                jmotif = jmotif.replace('_and_','&')
+            
+            index = []
+            index = [j for j,i in enumerate(data_hemi.index) if jmotif in i]
+            if len(index) == 0:
+                missing[i] = 1
+                position[i] = np.nan
+            else:
+                position[i] = index[0]
+
+    # finally, put together the transformed list
+    a_list = list(range(len(destrieux_atlas['labels'])))
+    data_mapping = atlas
+    for atlas_roi in a_list:
+        if np.isnan(position[atlas_roi]): # if we don't have this roi in atlas then fill with pre-defined value
+            if method == 'counts' or method == 'correlations':
+                data_mapping = np.where(data_mapping == atlas_roi, 0, data_mapping)
+            elif method == 'mean_zdiff':
+                data_mapping = np.where(data_mapping == atlas_roi, 1, data_mapping)
+
+        else:
+            data_mapping = np.where(data_mapping == atlas_roi, data_hemi.iloc[int(position[atlas_roi]),0], data_mapping)
+
+    
+
+    view = plotting.view_surf(fs_plot, data_mapping, threshold=None, symmetric_cmap=True, cmap='jet', bg_map=fs_sulc)
+    return(data_mapping, view, fs_plot, fs_sulc)
+
+
+#Change index to IDP
+pt_hc_z_sig_diff = pt_hc_z_sig_diff.set_index("IDP")
+
+# Plot the results for the left hemisphere
+data_mapping, view, fs_plot, fs_sulc = prepare_destrieux_plotting(pt_hc_z_sig_diff['tstat'].to_frame(), hemi='l', method='counts')
+plotting.view_surf(fs_plot, data_mapping, threshold=None, cmap='RdBu_r', bg_map=fs_sulc, vmax=3).save_as_html("/Final_results/Ttest_BL_Z_lh_map.html")
+
+# Plot the results for the right hemisphere
+data_mapping, view, fs_plot, fs_sulc = prepare_destrieux_plotting(pt_hc_z_sig_diff['tstat'].to_frame(), hemi='r', method='counts')
+plotting.view_surf(fs_plot, data_mapping, threshold=None, cmap='RdBu_r', bg_map=fs_sulc, vmax=3).save_as_html("/Final_results/Ttest_BL_Z_rh_map.html")
+
+
