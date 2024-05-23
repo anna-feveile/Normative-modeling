@@ -1,1 +1,1317 @@
+                ### 1. DATA PREPARATION ###
 
+# Create a conda environment
+#! conda create -y python==3.9 --name=PCN_long
+! conda activate PCN_long
+
+# Install the PCN toolkit
+! pip install pcntoolkit
+
+# Install the necessary libraries
+from pcntoolkit.normative import estimate, predict, evaluate
+from pcntoolkit.util.utils import create_design_matrix, compute_MSLL
+from sklearn.model_selection import train_test_split
+import xarray as xr
+import sklearn
+import numpy as np
+import pandas as pd
+import shutil
+import os
+
+
+# Cloning github repositories is not required, as this was done previously during baseline modeling.
+
+# Install the longitudinal modeling dependencies
+os.chdir("/PCNtoolkit-demo/tutorials/Long_NM/")
+! pip install - r requirements.txt
+
+# Set directories for working directory, pretrained directory and result directory
+working_dir = "/braincharts/Longitudinal_data_folder/"
+pretrained_dir = "/braincharts/"
+target_dir = "/braincharts/Longitudinal_data_folder/Results/"
+os.makedirs(target_dir, exist_ok=True)
+
+# Load the data by from V0 (baseline, P1a & P2a), V1 (6w, P1c & P2b),
+# V2 (26w, P1e & P2c), V3 (52w, P1f), and V4 (104w, P1g & P2d)
+os.chdir(working_dir)
+
+    # V0 (baseline)
+P1a = pd.read_csv("P1_a.csv", index_col=[0])
+P2a = pd.read_csv("P2_a.csv", index_col=[0])
+Pecans_0 = pd.merge(P1a, P2a, how="outer") # Pecans refers to both cohorts
+
+Pecans_0["Site"][Pecans_0["Id"].str.contains("PECANS_identifier")==True] = "GLO1"
+Pecans_0["Site"][Pecans_0["Id"].str.contains("PECANSII_identifier")==True] = "GLO2"
+Pecans_0["Sitenum"][Pecans_0["Id"].str.contains("PECANS_identifier")==True] = 0
+Pecans_0["Sitenum"][Pecans_0["Id"].str.contains("PECANSII_identifier")==True] = 1
+
+#Remove excluded subjects (due to MR finding, non-SCZ, quality or seponation)
+Pecans_0= Pecans_0[Pecans_0["Id"].str.contains("subject1|subject2|subject3|subject4|subject5|subject6|subject7") == False]
+Pecans_0= Pecans_0[Pecans_0["Id"].str.contains("subject1|subject2") == False]
+Pecans_0= Pecans_0[Pecans_0["Id"].str.contains("subject1|subject2|subject3") == False]
+Pecans_0= Pecans_0[Pecans_0["Id"].str.contains("subject1|subject2|subject3|subject4|subject5") == False]
+
+    # V1 (26w)
+P1c = pd.read_csv("P1_c.csv", index_col=[0])
+P2b = pd.read_csv("P2_b.csv", index_col=[0])
+Pecans_1 = pd.merge(P1c, P2b, how="outer")
+
+Pecans_1["Site"][Pecans_1["Id"].str.contains("PECANS_identifier")==True] = "GLO1"
+Pecans_1["Site"][Pecans_1["Id"].str.contains("PECANSII_identifier")==True] = "GLO2"
+Pecans_1["Sitenum"][Pecans_1["Id"].str.contains("PECANS_identifier")==True] = 0
+Pecans_1["Sitenum"][Pecans_1["Id"].str.contains("PECANSII_identifier")==True] = 1
+
+Pecans_1= Pecans_1[Pecans_1["Id"].str.contains("subject1|subject2|subject3|subject4|subject5|subject6|subject7") == False]
+Pecans_1= Pecans_1[Pecans_1["Id"].str.contains("subject1|subject2") == False]
+Pecans_1= Pecans_1[Pecans_1["Id"].str.contains("subject1|subject2|subject3") == False]
+Pecans_1= Pecans_1[Pecans_1["Id"].str.contains("subject1|subject2|subject3|subject4|subject5") == False]
+
+    # V2 (26w)
+P1e = pd.read_csv("P1_e.csv", index_col=[0])
+P2c = pd.read_csv("P2_c.csv", index_col=[0])
+Pecans_2 = pd.merge(P1e, P2c, how="outer")
+
+Pecans_2["Site"][Pecans_2["Id"].str.contains("PECANS_identifier")==True] = "GLO1"
+Pecans_2["Site"][Pecans_2["Id"].str.contains("PECANSII_identifier")==True] = "GLO2"
+Pecans_2["Sitenum"][Pecans_2["Id"].str.contains("PECANS_identifier")==True] = 0
+Pecans_2["Sitenum"][Pecans_2["Id"].str.contains("PECANSII_identifier")==True] = 1
+
+Pecans_2= Pecans_2[Pecans_2["Id"].str.contains("subject1|subject2|subject3|subject4|subject5|subject6|subject7") == False]
+Pecans_2= Pecans_2[Pecans_2["Id"].str.contains("subject1|subject2") == False]
+Pecans_2= Pecans_2[Pecans_2["Id"].str.contains("subject1|subject2|subject3") == False]
+Pecans_2= Pecans_2[Pecans_2["Id"].str.contains("subject1|subject2|subject3|subject4|subject5") == False]
+
+    # V3 (52w)
+Pecans_3 = pd.read_csv("P1_f.csv", index_col=[0])
+
+Pecans_3["Site"][Pecans_3["Id"].str.contains("PECANS_identifier")==True] = "GLO1"
+Pecans_3["Sitenum"][Pecans_3["Id"].str.contains("PECANS_identifier")==True] = 0
+
+Pecans_3= Pecans_3[Pecans_3["Id"].str.contains("subject1|subject2|subject3|subject4|subject5|subject6|subject7") == False]
+Pecans_3= Pecans_3[Pecans_3["Id"].str.contains("subject1|subject2") == False]
+Pecans_3= Pecans_3[Pecans_3["Id"].str.contains("subject1|subject2|subject3") == False]
+Pecans_3= Pecans_3[Pecans_3["Id"].str.contains("subject1|subject2|subject3|subject4|subject5") == False]
+
+    # V4 (104w)
+P1g = pd.read_csv("P1_g.csv", index_col=[0])
+P2d = pd.read_csv("P2_d.csv", index_col=[0])
+Pecans_4 = pd.merge(P1g, P2d, how="outer")
+
+Pecans_4["Site"][Pecans_4["Id"].str.contains("PECANS_identifier")==True] = "GLO1"
+Pecans_4["Site"][Pecans_4["Id"].str.contains("PECANSII_identifier")==True] = "GLO2"
+Pecans_4["Sitenum"][Pecans_4["Id"].str.contains("PECANS_identifier")==True] = 0
+Pecans_4["Sitenum"][Pecans_4["Id"].str.contains("PECANSII_identifier")==True] = 1
+
+Pecans_4= Pecans_4[Pecans_4["Id"].str.contains("subject1|subject2|subject3|subject4|subject5|subject6|subject7") == False]
+Pecans_4= Pecans_4[Pecans_4["Id"].str.contains("subject1|subject2") == False]
+Pecans_4= Pecans_4[Pecans_4["Id"].str.contains("subject1|subject2|subject3") == False]
+Pecans_4= Pecans_4[Pecans_4["Id"].str.contains("subject1|subject2|subject3|subject4|subject57") == False]
+
+# Divide each dataframe into HC and Pt
+Pecans_0_HC = Pecans_0[Pecans_0["Id"].str.contains("FEP_PECANS_identifier|FEP_PECANSII_identifier") == False]
+Pecans_0_Pt = Pecans_0[Pecans_0["Id"].str.contains("FEP_PECANS_identifier|FEP_PECANSII_identifier") == True]
+
+Pecans_1_HC = Pecans_1[Pecans_1["Id"].str.contains("FEP_PECANS_identifier|FEP_PECANSII_identifier") == False]
+Pecans_1_Pt = Pecans_1[Pecans_1["Id"].str.contains("FEP_PECANS_identifier|FEP_PECANSII_identifier") == True]
+
+Pecans_2_HC = Pecans_2[Pecans_2["Id"].str.contains("FEP_PECANS_identifier|FEP_PECANSII_identifier") == False]
+Pecans_2_Pt = Pecans_2[Pecans_2["Id"].str.contains("FEP_PECANS_identifier|FEP_PECANSII_identifier") == True]
+
+Pecans_3_HC = Pecans_3[Pecans_3["Id"].str.contains("FEP_PECANS_identifier|FEP_PECANSII_identifier") == False]
+Pecans_3_Pt = Pecans_3[Pecans_3["Id"].str.contains("FEP_PECANS_identifier|FEP_PECANSII_identifier") == True]
+
+Pecans_4_HC = Pecans_4[Pecans_4["Id"].str.contains("FEP_PECANS_identifier|FEP_PECANSII_identifier") == False]
+Pecans_4_Pt = Pecans_4[Pecans_4["Id"].str.contains("FEP_PECANS_identifier|FEP_PECANSII_identifier") == True]
+
+
+# Set index=Id
+Pecans_0_HC = Pecans_0_HC.set_index("Id")
+Pecans_0_Pt = Pecans_0_Pt.set_index("Id")
+
+Pecans_1_HC = Pecans_1_HC.set_index("Id")
+Pecans_1_Pt = Pecans_1_Pt.set_index("Id")
+
+Pecans_2_HC = Pecans_2_HC.set_index("Id")
+Pecans_2_Pt = Pecans_2_Pt.set_index("Id")
+
+Pecans_3_HC = Pecans_3_HC.set_index("Id")
+Pecans_3_Pt = Pecans_3_Pt.set_index("Id")
+
+Pecans_4_HC = Pecans_4_HC.set_index("Id")
+Pecans_4_Pt = Pecans_4_Pt.set_index("Id")
+
+#Remove all subjects that do not have baseline data
+Pecans_1_HC= Pecans_1_HC[Pecans_1_HC.index.isin(Pecans_0["Id"])]
+Pecans_2_HC= Pecans_2_HC[Pecans_2_HC.index.isin(Pecans_0["Id"])]
+Pecans_3_HC= Pecans_3_HC[Pecans_3_HC.index.isin(Pecans_0["Id"])]
+Pecans_4_HC= Pecans_4_HC[Pecans_4_HC.index.isin(Pecans_0["Id"])]
+
+Pecans_1_Pt= Pecans_1_Pt[Pecans_1_Pt.index.isin(Pecans_0["Id"])]
+Pecans_2_Pt= Pecans_2_Pt[Pecans_2_Pt.index.isin(Pecans_0["Id"])]
+Pecans_3_Pt= Pecans_3_Pt[Pecans_3_Pt.index.isin(Pecans_0["Id"])]
+Pecans_4_Pt= Pecans_4_Pt[Pecans_4_Pt.index.isin(Pecans_0["Id"])]
+
+# Change "&" to "and" in column names
+Pecans_0_HC.columns = Pecans_0_HC.columns.str.replace("_and_", "&", regex=True)
+Pecans_0_Pt.columns = Pecans_0_Pt.columns.str.replace("_and_", "&", regex=True)
+
+Pecans_1_HC.columns = Pecans_1_HC.columns.str.replace("_and_", "&", regex=True)
+Pecans_1_Pt.columns = Pecans_1_Pt.columns.str.replace("_and_", "&", regex=True)
+
+Pecans_2_HC.columns = Pecans_2_HC.columns.str.replace("_and_", "&", regex=True)
+Pecans_2_Pt.columns = Pecans_2_Pt.columns.str.replace("_and_", "&", regex=True)
+
+Pecans_3_HC.columns = Pecans_3_HC.columns.str.replace("_and_", "&", regex=True)
+Pecans_3_Pt.columns = Pecans_3_Pt.columns.str.replace("_and_", "&", regex=True)
+
+Pecans_4_HC.columns = Pecans_4_HC.columns.str.replace("_and_", "&", regex=True)
+Pecans_4_Pt.columns = Pecans_4_Pt.columns.str.replace("_and_", "&", regex=True)
+
+                ### 2. RUN NORMATIVE MODELS ###
+
+# Select adaptation data (same as for baseline modeling)
+os.chdir("/braincharts/baseline_data_folder/")
+ad_temp = pd.read_csv("Adaptation_data.csv", index_col="Id")
+ad_temp.index = ad_temp.index.str.replace("a", "", regex=True)
+
+index_controls_adjust = ad_temp.index
+
+te_temp = Pecans_0_HC[~Pecans_0_HC.index.isin(ad_temp.index)]
+
+index_controls_test = te_temp.index
+
+index_patients_test = list(Pecans_0_Pt.index)
+
+# Select columns containing covariate data
+covariates = ['Age', 'Sex']
+
+# Set limits for cubic B-spline basis
+xmin = -5
+xmax = 100
+
+# Select absolute Z threshold above which a sample is considered to be an outlier
+outlier_thresh = 7
+
+# Load site ids from pretrained data
+with open(os.path.join(pretrained_dir, 'docs', 'site_ids_ct_82sites.txt')) as f:
+    site_ids_pretrained = f.read().splitlines()
+
+# Load IDPs
+with open(os.path.join(pretrained_dir, 'docs', 'phenotypes_ct_lh.txt')) as f:
+        idp_ids_lh = f.read().splitlines()
+with open(os.path.join(pretrained_dir, 'docs', 'phenotypes_ct_rh.txt')) as f:
+        idp_ids_rh = f.read().splitlines()
+with open(os.path.join(pretrained_dir, 'docs', 'phenotypes_sc.txt')) as f:
+        idp_ids_sc = f.read().splitlines()
+
+# Select all IDPs
+idp_ids = idp_ids_lh + idp_ids_rh + idp_ids_sc
+
+# eTIV is removed as it is identical at all timepoints for each subjects
+idp_ids.remove("EstimatedTotalIntraCranialVol")
+
+# Define test data sites
+site_ids_test = pd.concat([Pecans_0_Pt, Pecans_0_HC], axis=0)['Site'].unique()
+
+# Align the indices for test data by removing subjects missing data from one visit (within pairs) 
+# from the index list.
+V0_V1_HC=Pecans_0_HC.index.intersection(Pecans_1_HC.index)
+V0_V1_Pt=Pecans_0_Pt.index.intersection(Pecans_1_Pt.index)
+
+V0_V2_HC=Pecans_0_HC.index.intersection(Pecans_2_HC.index)
+V0_V2_Pt=Pecans_0_Pt.index.intersection(Pecans_2_Pt.index)
+
+V0_V3_HC=Pecans_0_HC.index.intersection(Pecans_3_HC.index)
+V0_V3_Pt=Pecans_0_Pt.index.intersection(Pecans_3_Pt.index)
+
+V0_V4_HC=Pecans_0_HC.index.intersection(Pecans_4_HC.index)
+V0_V4_Pt=Pecans_0_Pt.index.intersection(Pecans_4_Pt.index)
+
+
+# Run the model separately for every visit and group
+for ivisit in range(0, 5):
+    print('Running models for visit no: '+str(ivisit))
+
+    visit_dir= os.path.join(target_dir, 'V'+str(ivisit))
+    os.makedirs(visit_dir, exist_ok=True)
+
+    # Choose Which data to be analyzed in which cycle
+    if ivisit == 0:
+        df_controls_adjust= Pecans_0_HC.loc[index_controls_adjust]
+        df_controls_test= Pecans_0_HC.loc[index_controls_test]
+        df_patients_test= Pecans_0_Pt
+
+    elif ivisit == 1:
+        # Use the first visit of controls as site adjustment in all visits.
+        df_controls_adjust= Pecans_0_HC.loc[index_controls_adjust]
+        df_controls_test= Pecans_1_HC.loc[index_controls_test.intersection(V0_V1_HC)]
+        df_patients_test= Pecans_1_Pt.loc[V0_V1_Pt]
+
+    elif ivisit == 2:
+        df_controls_adjust= Pecans_0_HC.loc[index_controls_adjust]
+        df_controls_test= Pecans_2_HC.loc[index_controls_test.intersection(V0_V2_HC)]
+        df_patients_test= Pecans_2_Pt.loc[V0_V2_Pt]
+
+    elif ivisit == 3:
+        df_controls_adjust= Pecans_0_HC.loc[index_controls_adjust]
+        df_controls_test= Pecans_3_HC.loc[index_controls_test.intersection(V0_V3_HC)]
+        df_patients_test= Pecans_3_Pt.loc[V0_V3_Pt]
+        
+    elif ivisit == 4:
+        df_controls_adjust= Pecans_0_HC.loc[index_controls_adjust]
+        df_controls_test= Pecans_4_HC.loc[index_controls_test.intersection(V0_V4_HC)]
+        df_patients_test= Pecans_4_Pt.loc[V0_V4_Pt]
+
+
+    # Save the files into csv files
+    df_controls_adjust.to_csv(os.path.join(
+        visit_dir, 'v'+str(ivisit)+'_controls_adjust.csv'), sep=' ')
+    df_controls_test.to_csv(os.path.join(
+        visit_dir, 'v'+str(ivisit)+'_controls_test.csv'), sep=' ')
+    df_patients_test.to_csv(os.path.join(
+        visit_dir, 'v'+str(ivisit)+'_patients_test.csv'), sep=' ')
+
+    # Cycle through all pretrained model coefficients for each IDP and apply model
+    for iidp_no, iidp in enumerate(idp_ids):
+        # Create folder for the particular IDP (in visit dir)
+        idp_visit_dir= os.path.join(visit_dir, iidp)
+        os.makedirs(idp_visit_dir, exist_ok=True)
+        os.chdir(idp_visit_dir)
+        # Assuming that the data used were not a part of the original dataset on which the model was trained
+        if not all(elem in site_ids_pretrained for elem in site_ids_test):
+            print('The data are not part of the original dataset')
+            # Configure and save the design matrices for adaptation data
+            design_matrix_controls_adjust= create_design_matrix(df_controls_adjust[covariates],
+                                                    site_ids=df_controls_adjust['Site'],
+                                                    all_sites=site_ids_pretrained,
+                                                    basis='bspline', xmin=xmin, xmax=xmax)
+            np.savetxt(os.path.join(
+                idp_visit_dir, 'design_matrix_controls_adjust.txt'), design_matrix_controls_adjust)
+
+            # Configure and save the design matrices for HCs
+            design_matrix_controls_test= create_design_matrix(df_controls_test[covariates],
+                                                    site_ids=df_controls_test['Site'],
+                                                    all_sites=site_ids_pretrained,
+                                                    basis='bspline', xmin=xmin, xmax=xmax)
+            np.savetxt(os.path.join(
+                idp_visit_dir, 'design_matrix_controls_test.txt'), design_matrix_controls_test)
+
+            # Configure and save the design matrices for patients (FEP)
+            design_matrix_patients_test= create_design_matrix(df_patients_test[covariates],
+                                                    site_ids=df_patients_test['Site'],
+                                                    all_sites=site_ids_pretrained,
+                                                    basis='bspline', xmin=xmin, xmax=xmax)
+            np.savetxt(os.path.join(
+                idp_visit_dir, 'design_matrix_patients_test.txt'), design_matrix_patients_test)
+
+            # Save responses for adaptation data
+            np.savetxt(os.path.join(
+                idp_visit_dir, 'response_controls_adjust.txt'), df_controls_adjust[iidp].to_numpy())
+            # Save responses for control data
+            np.savetxt(os.path.join(
+                idp_visit_dir, 'response_controls_test.txt'), df_controls_test[iidp].to_numpy())
+            # Save responses for patient data
+            np.savetxt(os.path.join(
+                idp_visit_dir, 'response_patients_test.txt'), df_patients_test[iidp].to_numpy())
+
+            # Save sitenum for adaptation data
+            np.savetxt(os.path.join(idp_visit_dir, 'sitenum_controls_adjust.txt'),
+                       df_controls_adjust['Sitenum'].to_numpy())
+            # Save sitenum for control data
+            np.savetxt(os.path.join(idp_visit_dir, 'sitenum_controls_test.txt'),
+                       df_controls_test['Sitenum'].to_numpy())
+            # Save sitenum for patient data
+            np.savetxt(os.path.join(idp_visit_dir, 'sitenum_patients_test.txt'),
+                       df_patients_test['Sitenum'].to_numpy())
+
+            # Actually run the model for controls and patients
+            yhat, s2, Z, y= predict(os.path.join(idp_visit_dir, 'design_matrix_controls_test.txt'),
+                                     respfile=os.path.join(
+                                         idp_visit_dir, 'response_controls_test.txt'),
+                                     alg='blr',
+                                     model_path=os.path.join(
+                                         pretrained_dir, 'models', 'lifespan_57K_82sites', iidp, 'Models'),
+                                     adaptrespfile=os.path.join(
+                                         idp_visit_dir, 'response_controls_adjust.txt'),
+                                     adaptcovfile=os.path.join(
+                                         idp_visit_dir, 'design_matrix_controls_adjust.txt'),
+                                     adaptvargroupfile=os.path.join(
+                                         idp_visit_dir, 'sitenum_controls_adjust.txt'),
+                                     testvargroupfile=os.path.join(
+                                         idp_visit_dir, 'sitenum_controls_test.txt'),
+                                     outputsuffix='controls_test',
+                                     return_y=True
+                                     )
+
+            yhat, s2, Z, y= predict(os.path.join(idp_visit_dir, 'design_matrix_patients_test.txt'),
+                                     respfile=os.path.join(
+                                         idp_visit_dir, 'response_patients_test.txt'),
+                                     alg='blr',
+                                     model_path=os.path.join(
+                                         pretrained_dir, 'models', 'lifespan_57K_82sites', iidp, 'Models'),
+                                     adaptrespfile=os.path.join(
+                                         idp_visit_dir, 'response_controls_adjust.txt'),
+                                     adaptcovfile=os.path.join(
+                                         idp_visit_dir, 'design_matrix_controls_adjust.txt'),
+                                     adaptvargroupfile=os.path.join(
+                                         idp_visit_dir, 'sitenum_controls_adjust.txt'),
+                                     testvargroupfile=os.path.join(
+                                         idp_visit_dir, 'sitenum_patients_test.txt'),
+                                     outputsuffix='patients_test',
+                                     return_y=True
+                                     )
+
+# Apply functions to concatenate outputs
+def idp_concat_quality(target_dir, idp_ids, suffix='predict'):
+    """
+    Concatenate the quality measures over all idps
+    returns pandas table of
+    """
+    quality_measures= ['EXPV', 'Rho', 'pRho', 'RMSE', 'SMSE']
+
+    qm= np.empty([len(idp_ids), len(quality_measures)])
+    for i, idp in enumerate(idp_ids):
+        for j, iq in enumerate(quality_measures):
+            qm[i, j] = np.genfromtxt(os.path.join(target_dir, idp, iq+'_'+suffix + '.txt'), delimiter=' ')
+
+    qm= pd.DataFrame(qm, columns=quality_measures, index=idp_ids)
+
+    return(qm)
+
+def idp_concat(m_dir, f_name, idp_ids, t_name, **kwargs):
+    """
+    Concatenates a vector file across all IDP's and writes
+    returns the path to the file
+
+    file_path = idp_concat(m_dir, f_name, idp_ids, t_name, **kwargs)
+        - m_dir = main dir with all the models
+        - f_name = the textfile to load across all models
+        - idp_ids = list of idps
+        - t_name = target name of the file
+        - t_dir = target directory if different than the main directory (where all the dirs for idps are)
+
+    """
+    t_dir= kwargs.get('t_dir', m_dir)
+
+    # Get dimensions of an empty array
+    l = np.genfromtxt(os.path.join(m_dir, idp_ids[0], f_name), delimiter=' ').shape[0]
+    na = np.empty([l, len(idp_ids)])
+
+    for n_idp, idp in enumerate(idp_ids):
+        na[:, n_idp]= np.genfromtxt(os.path.join(m_dir, idp, f_name), delimiter=' ')
+
+    df_na= pd.DataFrame(na, columns = idp_ids)
+    df_na.to_csv(os.path.join(t_dir, t_name), sep=' ', header=True, index=True)
+
+    return(os.path.join(t_dir, t_name))
+
+def prepare_destrieux_plotting(data, hemi, method='counts'):
+    """
+    Prepare data for IDP plotting using destrieux atlas
+    data = has to be pd.DataFrame with exactly one column
+    hemi = hemisphere 'r' or 'l'
+    method = counts/correlations/pvals 
+            - this is only relevant if there is an IDP missing, it will automatically fill the missing IDP with unsignificant value (0 for counts, 1 for p-values)
+            - counts/correlations = 0
+            - mean_Zdiff = 1
+    returns: return(data_mapping, view, fs_plot, fs_sulc)
+
+    Use: view = plotting.view_surf(fs_plot, data_mapping, threshold=None, symmetric_cmap=True, cmap='jet', bg_map=fs_sulc)
+    """
+    # Import packages
+    from nilearn import datasets
+    import nilearn.plotting as plotting
+
+    # load destrieux atlas
+    destrieux_atlas = datasets.fetch_atlas_surf_destrieux()
+    fsaverage = datasets.fetch_surf_fsaverage()
+
+    # Pick hemisphere
+    if hemi == 'r':
+        atlas = destrieux_atlas['map_right']
+        filter_hemi = 'rh'
+        fs_plot = fsaverage.infl_right
+        fs_sulc = fsaverage.sulc_right
+    elif hemi == 'l':
+        atlas = destrieux_atlas['map_left']
+        filter_hemi = 'lh'
+        fs_plot = fsaverage.infl_left
+        fs_sulc = fsaverage.sulc_left
+    
+    # Check whether the values are on rows or in columns
+    if [True for i in data.columns if 'occipital' in i]:
+        data = data.transpose()
+    
+    # Filter the needed hemisphere
+    data_hemi = data.loc[[i for i in data.index if filter_hemi in i]]
+    if data_hemi.shape[0] == 0:
+        data_hemi = data
+    
+
+    # Check whether some IDPs are missing
+    if data_hemi.shape[0] == len(destrieux_atlas['labels']):
+        print('all IDPs present')
+    else: 
+        # Run over all all labels and see whether the name exists    
+        str(destrieux_atlas['labels'][0]).split('\'')[1]
+        missing=np.zeros(len(destrieux_atlas['labels']))
+        position=np.zeros(len(destrieux_atlas['labels']))
+        for i, imotif in enumerate(destrieux_atlas['labels']): 
+            jmotif = str(imotif).split('\'')[1]
+            
+            # Change _and_ to &
+            if '_and_' in jmotif:
+                jmotif = jmotif.replace('_and_','&')
+            
+            index = []
+            index = [j for j,i in enumerate(data_hemi.index) if jmotif in i]
+            if len(index) == 0:
+                missing[i] = 1
+                position[i] = np.nan
+            else:
+                position[i] = index[0]
+
+    # Put together the transformed list
+    a_list = list(range(len(destrieux_atlas['labels'])))
+    data_mapping = atlas
+    for atlas_IDP in a_list:
+        if np.isnan(position[atlas_IDP]): # If the IDP is not in atlas then fill with pre-defined value
+            if method == 'counts' or method == 'correlations':
+                data_mapping = np.where(data_mapping == atlas_IDP, 0, data_mapping)
+            elif method == 'mean_zdiff':
+                data_mapping = np.where(data_mapping == atlas_IDP, 1, data_mapping)
+
+        else:
+            data_mapping = np.where(data_mapping == atlas_IDP, data_hemi.iloc[int(position[atlas_IDP]),0], data_mapping)
+
+    
+
+    view = plotting.view_surf(fs_plot, data_mapping, threshold=None, symmetric_cmap=True, cmap='jet', bg_map=fs_sulc)
+    return(data_mapping, view, fs_plot, fs_sulc)
+
+
+# Concatenate quality measures (only controls as patients are considered "abnormal")
+v0_qm= idp_concat_quality(os.path.join(target_dir, 'V0'), idp_ids, suffix = 'controlstest')
+v1_qm= idp_concat_quality(os.path.join(target_dir, 'V1'), idp_ids, suffix = 'controlstest')
+v2_qm= idp_concat_quality(os.path.join(target_dir, 'V2'), idp_ids, suffix = 'controlstest')
+v3_qm= idp_concat_quality(os.path.join(target_dir, 'V3'), idp_ids, suffix = 'controlstest')
+v4_qm= idp_concat_quality(os.path.join(target_dir, 'V4'), idp_ids, suffix = 'controlstest')
+
+# Concatenate IDPs separately for each visit and each group
+for ivisit in range(0, 5):
+    idp_concat(os.path.join(target_dir, 'V'+str(ivisit)), 'Y_controlstest.txt', idp_ids,
+               'Y_controlstest_concat.txt', t_dir=os.path.join(target_dir, 'V'+str(ivisit)))
+    idp_concat(os.path.join(target_dir, 'V'+str(ivisit)), 'yhat_controlstest.txt', idp_ids,
+               'Yhat_controlstest_concat.txt', t_dir=os.path.join(target_dir, 'V'+str(ivisit)))
+    idp_concat(os.path.join(target_dir, 'V'+str(ivisit)), 'Z_controlstest.txt', idp_ids,
+               'Z_controlstest_concat.txt', t_dir=os.path.join(target_dir, 'V'+str(ivisit)))
+    idp_concat(os.path.join(target_dir, 'V'+str(ivisit)), 'ys2_controlstest.txt', idp_ids,
+               'Ys2_controlstest_concat.txt', t_dir=os.path.join(target_dir, 'V'+str(ivisit)))
+
+    idp_concat(os.path.join(target_dir, 'V'+str(ivisit)), 'Y_patientstest.txt', idp_ids,
+               'Y_patientstest_concat.txt', t_dir=os.path.join(target_dir, 'V'+str(ivisit)))
+    idp_concat(os.path.join(target_dir, 'V'+str(ivisit)), 'yhat_patientstest.txt', idp_ids,
+               'Yhat_patientstest_concat.txt', t_dir=os.path.join(target_dir, 'V'+str(ivisit)))
+    idp_concat(os.path.join(target_dir, 'V'+str(ivisit)), 'Z_patientstest.txt', idp_ids,
+               'Z_patientstest_concat.txt', t_dir=os.path.join(target_dir, 'V'+str(ivisit)))
+    idp_concat(os.path.join(target_dir, 'V'+str(ivisit)), 'ys2_patientstest.txt', idp_ids,
+               'Ys2_patientstest_concat.txt', t_dir=os.path.join(target_dir, 'V'+str(ivisit)))
+
+# Put together the results of normative models (in xarray structure)
+for idataset in ['controls', 'patients']:
+    print(idataset)
+    for ivisit in [0,1]:
+        print(ivisit)
+        temp_v1 = xr.concat([
+                    xr.DataArray(pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'Y_'+idataset+'test_concat.txt'), sep=' ', index_col =0)[idp_ids], [('subject', pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'v'+str(ivisit)+'_'+idataset+'_test.csv'), sep=' ', index_col =0).index), ('IDP', idp_ids)]),
+                    xr.DataArray(pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'Z_'+idataset+'test_concat.txt'), sep=' ', index_col =0)[idp_ids], [('subject', pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'v'+str(ivisit)+'_'+idataset+'_test.csv'), sep=' ', index_col =0).index), ('IDP', idp_ids)]),
+                    xr.DataArray(pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'Yhat_'+idataset+'test_concat.txt'), sep=' ', index_col =0)[idp_ids], [('subject', pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'v'+str(ivisit)+'_'+idataset+'_test.csv'), sep=' ', index_col =0).index), ('IDP', idp_ids)]),
+                    xr.DataArray(pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'Ys2_'+idataset+'test_concat.txt'), sep=' ', index_col =0)[idp_ids], [('subject', pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'v'+str(ivisit)+'_'+idataset+'_test.csv'), sep=' ', index_col =0).index), ('IDP', idp_ids)]),
+                  ], 
+                  pd.Index(['Y', 'Z', 'Yhat', 'S2'], name='features')
+                  )
+        if ivisit == 0:
+            temp_v0=temp_v1
+            
+        if (idataset == 'controls') & (ivisit==1):
+            xr_con_V1 = xr.concat([
+                temp_v0, temp_v1
+            ],
+            pd.Index(['V0', 'V1'], name = 'visit'))
+
+        if (idataset == 'patients') & (ivisit==1):
+            xr_pat_V1 = xr.concat([
+                temp_v0, temp_v1
+            ],
+            pd.Index(['V0', 'V1'], name = 'visit'))
+
+for idataset in ['controls', 'patients']:
+    print(idataset)
+    for ivisit in [0,2]:
+        print(ivisit)
+        temp_v2 = xr.concat([
+                    xr.DataArray(pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'Y_'+idataset+'test_concat.txt'), sep=' ', index_col =0)[idp_ids], [('subject', pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'v'+str(ivisit)+'_'+idataset+'_test.csv'), sep=' ', index_col =0).index), ('IDP', idp_ids)]),
+                    xr.DataArray(pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'Z_'+idataset+'test_concat.txt'), sep=' ', index_col =0)[idp_ids], [('subject', pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'v'+str(ivisit)+'_'+idataset+'_test.csv'), sep=' ', index_col =0).index), ('IDP', idp_ids)]),
+                    xr.DataArray(pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'Yhat_'+idataset+'test_concat.txt'), sep=' ', index_col =0)[idp_ids], [('subject', pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'v'+str(ivisit)+'_'+idataset+'_test.csv'), sep=' ', index_col =0).index), ('IDP', idp_ids)]),
+                    xr.DataArray(pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'Ys2_'+idataset+'test_concat.txt'), sep=' ', index_col =0)[idp_ids], [('subject', pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'v'+str(ivisit)+'_'+idataset+'_test.csv'), sep=' ', index_col =0).index), ('IDP', idp_ids)]),
+                  ], 
+                  pd.Index(['Y', 'Z', 'Yhat', 'S2'], name='features')
+                  )
+        if ivisit == 0:
+            temp_v0=temp_v2
+            
+        if (idataset == 'controls') & (ivisit==2):
+            xr_con_V2 = xr.concat([
+                temp_v0, temp_v2
+            ],
+            pd.Index(['V0', 'V2'], name = 'visit'))
+
+        if (idataset == 'patients') & (ivisit==2):
+            xr_pat_V2 = xr.concat([
+                temp_v0, temp_v2
+            ],
+            pd.Index(['V0', 'V2'], name = 'visit'))
+
+for idataset in ['controls', 'patients']:
+    print(idataset)
+    for ivisit in [0,3]:
+        print(ivisit)
+        temp_v3 = xr.concat([
+                    xr.DataArray(pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'Y_'+idataset+'test_concat.txt'), sep=' ', index_col =0)[idp_ids], [('subject', pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'v'+str(ivisit)+'_'+idataset+'_test.csv'), sep=' ', index_col =0).index), ('IDP', idp_ids)]),
+                    xr.DataArray(pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'Z_'+idataset+'test_concat.txt'), sep=' ', index_col =0)[idp_ids], [('subject', pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'v'+str(ivisit)+'_'+idataset+'_test.csv'), sep=' ', index_col =0).index), ('IDP', idp_ids)]),
+                    xr.DataArray(pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'Yhat_'+idataset+'test_concat.txt'), sep=' ', index_col =0)[idp_ids], [('subject', pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'v'+str(ivisit)+'_'+idataset+'_test.csv'), sep=' ', index_col =0).index), ('IDP', idp_ids)]),
+                    xr.DataArray(pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'Ys2_'+idataset+'test_concat.txt'), sep=' ', index_col =0)[idp_ids], [('subject', pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'v'+str(ivisit)+'_'+idataset+'_test.csv'), sep=' ', index_col =0).index), ('IDP', idp_ids)]),
+                  ], 
+                  pd.Index(['Y', 'Z', 'Yhat', 'S2'], name='features')
+                  )
+        if ivisit == 0:
+            temp_v0=temp_v3
+            
+        if (idataset == 'controls') & (ivisit==3):
+            xr_con_V3 = xr.concat([
+                temp_v0, temp_v3
+            ],
+            pd.Index(['V0', 'V3'], name = 'visit'))
+
+        if (idataset == 'patients') & (ivisit==3):
+            xr_pat_V3 = xr.concat([
+                temp_v0, temp_v3
+            ],
+            pd.Index(['V0', 'V3'], name = 'visit'))
+
+for idataset in ['controls', 'patients']:
+    print(idataset)
+    for ivisit in [0,4]:
+        print(ivisit)
+        temp_v4 = xr.concat([
+                    xr.DataArray(pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'Y_'+idataset+'test_concat.txt'), sep=' ', index_col =0)[idp_ids], [('subject', pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'v'+str(ivisit)+'_'+idataset+'_test.csv'), sep=' ', index_col =0).index), ('IDP', idp_ids)]),
+                    xr.DataArray(pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'Z_'+idataset+'test_concat.txt'), sep=' ', index_col =0)[idp_ids], [('subject', pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'v'+str(ivisit)+'_'+idataset+'_test.csv'), sep=' ', index_col =0).index), ('IDP', idp_ids)]),
+                    xr.DataArray(pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'Yhat_'+idataset+'test_concat.txt'), sep=' ', index_col =0)[idp_ids], [('subject', pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'v'+str(ivisit)+'_'+idataset+'_test.csv'), sep=' ', index_col =0).index), ('IDP', idp_ids)]),
+                    xr.DataArray(pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'Ys2_'+idataset+'test_concat.txt'), sep=' ', index_col =0)[idp_ids], [('subject', pd.read_csv(os.path.join(target_dir, 'V'+str(ivisit), 'v'+str(ivisit)+'_'+idataset+'_test.csv'), sep=' ', index_col =0).index), ('IDP', idp_ids)]),
+                  ], 
+                  pd.Index(['Y', 'Z', 'Yhat', 'S2'], name='features')
+                  )
+        if ivisit == 0:
+            temp_v0=temp_v4
+            
+        if (idataset == 'controls') & (ivisit==4):
+            xr_con_V4 = xr.concat([
+                temp_v0, temp_v4
+            ],
+            pd.Index(['V0', 'V4'], name = 'visit'))
+
+        if (idataset == 'patients') & (ivisit==4):
+            xr_pat_V4 = xr.concat([
+                temp_v0, temp_v4
+            ],
+            pd.Index(['V0', 'V4'], name = 'visit'))
+
+        
+# Load subject indicies directly from file to ensure they match with the results
+con_idx_0= pd.read_csv(os.path.join(target_dir, 'V0', 'v0_controls_test.csv'), sep=' ', index_col =0).index
+pat_idx_0= pd.read_csv(os.path.join(target_dir, 'V0', 'v0_patients_test.csv'), sep=' ', index_col =0).index
+
+con_idx_1= pd.read_csv(os.path.join(target_dir, 'V1', 'v1_controls_test.csv'), sep=' ', index_col =0).index
+pat_idx_1= pd.read_csv(os.path.join(target_dir, 'V1', 'v1_patients_test.csv'), sep=' ', index_col =0).index
+
+con_idx_2= pd.read_csv(os.path.join(target_dir, 'V2', 'v2_controls_test.csv'), sep=' ', index_col =0).index
+pat_idx_2= pd.read_csv(os.path.join(target_dir, 'V2', 'v2_patients_test.csv'), sep=' ', index_col =0).index
+
+con_idx_3= pd.read_csv(os.path.join(target_dir, 'V3', 'v3_controls_test.csv'), sep=' ', index_col =0).index
+pat_idx_3= pd.read_csv(os.path.join(target_dir, 'V3', 'v3_patients_test.csv'), sep=' ', index_col =0).index
+
+con_idx_4= pd.read_csv(os.path.join(target_dir, 'V4', 'v4_controls_test.csv'), sep=' ', index_col =0).index
+pat_idx_4= pd.read_csv(os.path.join(target_dir, 'V4', 'v4_patients_test.csv'), sep=' ', index_col =0).index
+
+
+## Concat covariates/clinical measures for each visit (and baseline) and each group
+    #V1
+con_clin_V1= xr.concat([
+        xr.DataArray(Pecans_0_HC[['Age', 'Sex', 'Site']].loc[con_idx_0], [
+                     ('subject', con_idx_0), ('covariates', ['Age', 'Sex', 'Site'])]),
+        xr.DataArray(Pecans_1_HC[['Age', 'Sex', 'Site']].loc[con_idx_1], [
+                     ('subject', con_idx_1), ('covariates', ['Age', 'Sex', 'Site'])])
+        ],
+        pd.Index(['V0', 'V1'], name='visit'))
+
+pat_clin_V1= xr.concat([
+        xr.DataArray(Pecans_0_Pt[['Age', 'Sex', 'Site']], [
+                     ('subject', pat_idx_0), ('covariates', ['Age', 'Sex', 'Site'])]),
+        xr.DataArray(Pecans_1_Pt[['Age', 'Sex', 'Site']], [
+                     ('subject', pat_idx_1), ('covariates', ['Age', 'Sex', 'Site'])])
+        ],
+        pd.Index(['V0', 'V1'], name='visit'))
+
+    #V2
+con_clin_V2= xr.concat([
+        xr.DataArray(Pecans_0_HC[['Age', 'Sex', 'Site']].loc[con_idx_0], [
+                     ('subject', con_idx_0), ('covariates', ['Age', 'Sex', 'Site'])]),
+        xr.DataArray(Pecans_2_HC[['Age', 'Sex', 'Site']].loc[con_idx_2], [
+                     ('subject', con_idx_2), ('covariates', ['Age', 'Sex', 'Site'])])
+        ],
+        pd.Index(['V0', 'V2'], name='visit'))
+
+pat_clin_V2= xr.concat([
+        xr.DataArray(Pecans_0_Pt[['Age', 'Sex', 'Site']], [
+                     ('subject', pat_idx_0), ('covariates', ['Age', 'Sex', 'Site'])]),
+        xr.DataArray(Pecans_2_Pt[['Age', 'Sex', 'Site']], [
+                     ('subject', pat_idx_2), ('covariates', ['Age', 'Sex', 'Site'])])
+        ],
+        pd.Index(['V0', 'V2'], name='visit'))
+
+    #V3
+con_clin_V3= xr.concat([
+        xr.DataArray(Pecans_0_HC[['Age', 'Sex', 'Site']].loc[con_idx_0], [
+                     ('subject', con_idx_0), ('covariates', ['Age', 'Sex', 'Site'])]),
+        xr.DataArray(Pecans_3_HC[['Age', 'Sex', 'Site']].loc[con_idx_3], [
+                     ('subject', con_idx_3), ('covariates', ['Age', 'Sex', 'Site'])])
+        ],
+        pd.Index(['V0', 'V3'], name='visit'))
+
+pat_clin_V3= xr.concat([
+        xr.DataArray(Pecans_0_Pt[['Age', 'Sex', 'Site']], [
+                     ('subject', pat_idx_0), ('covariates', ['Age', 'Sex', 'Site'])]),
+        xr.DataArray(Pecans_3_Pt[['Age', 'Sex', 'Site']], [
+                     ('subject', pat_idx_3), ('covariates', ['Age', 'Sex', 'Site'])])
+        ],
+        pd.Index(['V0', 'V3'], name='visit'))
+
+    #V4
+con_clin_V4= xr.concat([
+        xr.DataArray(Pecans_0_HC[['Age', 'Sex', 'Site']].loc[con_idx_0], [
+                     ('subject', con_idx_0), ('covariates', ['Age', 'Sex', 'Site'])]),
+        xr.DataArray(Pecans_4_HC[['Age', 'Sex', 'Site']].loc[con_idx_4], [
+                     ('subject', con_idx_4), ('covariates', ['Age', 'Sex', 'Site'])])
+        ],
+        pd.Index(['V0', 'V4'], name='visit'))
+
+pat_clin_V4= xr.concat([
+        xr.DataArray(Pecans_0_Pt[['Age', 'Sex', 'Site']], [
+                     ('subject', pat_idx_0), ('covariates', ['Age', 'Sex', 'Site'])]),
+        xr.DataArray(Pecans_4_Pt[['Age', 'Sex', 'Site']], [
+                     ('subject', pat_idx_4), ('covariates', ['Age', 'Sex', 'Site'])])
+        ],
+        pd.Index(['V0', 'V4'], name='visit'))
+
+
+
+# Merge into two final structures (for each visit)
+xr_pat_V1= xr.merge([xr_pat_V1.to_dataset(name = 'neuroimaging'), pat_clin_V1.to_dataset(name ='clinics')])
+xr_con_V1= xr.merge([xr_con_V1.to_dataset(name = 'neuroimaging'), con_clin_V1.to_dataset(name ='clinics')])
+
+xr_pat_V2= xr.merge([xr_pat_V2.to_dataset(name = 'neuroimaging'), pat_clin_V2.to_dataset(name ='clinics')])
+xr_con_V2= xr.merge([xr_con_V2.to_dataset(name = 'neuroimaging'), con_clin_V2.to_dataset(name ='clinics')])
+
+xr_pat_V3= xr.merge([xr_pat_V3.to_dataset(name = 'neuroimaging'), pat_clin_V2.to_dataset(name ='clinics')])
+xr_con_V3= xr.merge([xr_con_V3.to_dataset(name = 'neuroimaging'), con_clin_V2.to_dataset(name ='clinics')])
+
+xr_pat_V4= xr.merge([xr_pat_V4.to_dataset(name = 'neuroimaging'), pat_clin_V2.to_dataset(name ='clinics')])
+xr_con_V4= xr.merge([xr_con_V4.to_dataset(name = 'neuroimaging'), con_clin_V2.to_dataset(name ='clinics')])
+
+
+                ### 3. Compute Zdiff-scores ###
+
+# Estimate the variance in healthy controls
+    #V1
+con_sqrt_V1 = np.sqrt(
+        pd.DataFrame(
+    (
+            (xr_con_V1.sel(visit='V1', features='Y').neuroimaging - xr_con_V1.sel(visit='V1', features='Yhat').neuroimaging)
+            -
+            (xr_con_V1.sel(visit='V0', features='Y').neuroimaging - xr_con_V1.sel(visit='V0', features='Yhat').neuroimaging)
+
+    ).var(axis=0).to_pandas()
+    ).T
+)
+
+    # V2
+con_sqrt_V2 = np.sqrt(
+        pd.DataFrame(
+    (
+            (xr_con_V2.sel(visit='V2', features='Y').neuroimaging - xr_con_V2.sel(visit='V2', features='Yhat').neuroimaging)
+            -
+            (xr_con_V2.sel(visit='V0', features='Y').neuroimaging - xr_con_V2.sel(visit='V0', features='Yhat').neuroimaging)
+
+    ).var(axis=0).to_pandas()
+    ).T
+)
+    # V3
+con_sqrt_V3 = np.sqrt(
+        pd.DataFrame(
+    (
+            (xr_con_V3.sel(visit='V3', features='Y').neuroimaging - xr_con_V3.sel(visit='V3', features='Yhat').neuroimaging)
+            -
+            (xr_con_V3.sel(visit='V0', features='Y').neuroimaging - xr_con_V3.sel(visit='V0', features='Yhat').neuroimaging)
+
+    ).var(axis=0).to_pandas()
+    ).T
+)
+    # V4
+con_sqrt_V4 = np.sqrt(
+        pd.DataFrame(
+    (
+            (xr_con_V4.sel(visit='V4', features='Y').neuroimaging - xr_con_V4.sel(visit='V4', features='Yhat').neuroimaging)
+            -
+            (xr_con_V4.sel(visit='V0', features='Y').neuroimaging - xr_con_V4.sel(visit='V0', features='Yhat').neuroimaging)
+
+    ).var(axis=0).to_pandas()
+    ).T
+)
+
+# Substract the two patient visits (follow-up visit minus baseline)
+pat_zdiff_V1 = (
+                (xr_pat_V1.sel(visit='V1', features='Y').neuroimaging - xr_pat_V1.sel(visit='V1', features='Yhat').neuroimaging)
+                -
+                (xr_pat_V1.sel(visit='V0', features='Y').neuroimaging - xr_pat_V1.sel(visit='V0', features='Yhat').neuroimaging)
+            ).to_pandas()
+    
+    
+pat_zdiff_V2 = (
+                (xr_pat_V2.sel(visit='V2', features='Y').neuroimaging - xr_pat_V2.sel(visit='V2', features='Yhat').neuroimaging)
+                -
+                (xr_pat_V2.sel(visit='V0', features='Y').neuroimaging - xr_pat_V2.sel(visit='V0', features='Yhat').neuroimaging)
+            ).to_pandas()
+
+
+pat_zdiff_V3 = (
+                (xr_pat_V3.sel(visit='V3', features='Y').neuroimaging - xr_pat_V3.sel(visit='V3', features='Yhat').neuroimaging)
+                -
+                (xr_pat_V3.sel(visit='V0', features='Y').neuroimaging - xr_pat_V3.sel(visit='V0', features='Yhat').neuroimaging)
+            ).to_pandas()
+    
+    
+pat_zdiff_V4 = (
+                (xr_pat_V4.sel(visit='V4', features='Y').neuroimaging - xr_pat_V4.sel(visit='V4', features='Yhat').neuroimaging)
+                -
+                (xr_pat_V4.sel(visit='V0', features='Y').neuroimaging - xr_pat_V4.sel(visit='V0', features='Yhat').neuroimaging)
+            ).to_pandas()
+    
+
+# Compute the zdiff score
+pat_zdiff_V1= pat_zdiff_V1.div(con_sqrt_V1.squeeze(), axis='columns')
+pat_zdiff_V2= pat_zdiff_V2.div(con_sqrt_V2.squeeze(), axis='columns')
+pat_zdiff_V3= pat_zdiff_V3.div(con_sqrt_V3.squeeze(), axis='columns')
+pat_zdiff_V4= pat_zdiff_V4.div(con_sqrt_V4.squeeze(), axis='columns')
+
+
+                ### 4. Zdiff score test and visualizations ###
+                
+# Statistically test the median of zdiff scores against zero
+! pip install statsmodels
+from scipy.stats import wilcoxon
+import statsmodels.stats.multitest as multi
+
+    ## For V1 ##
+# Create empty lists to store the results
+columns_V1= []
+w_statistics_V1= []
+p_values_V1= []
+
+# Loop through each column in the DataFrame
+pat_zdiff_V1=pat_zdiff_V1.dropna(axis=0, thresh=10)
+
+cols=pat_zdiff_V1.columns
+
+for index, column in enumerate(cols):
+    # Perform the Wilcoxon signed-rank test for the column against zero
+    w_stat, p_value= wilcoxon(pat_zdiff_V1[column], zero_method='zsplit')
+
+    # Store the results in the lists
+    columns_V1.append(column)
+    w_statistics_V1.append(w_stat)
+    p_values_V1.append(p_value)
+
+# Create a new DataFrame from the lists
+wilcoxon_results_V1= pd.DataFrame({'IDP': columns_V1, 'W-statistic': w_statistics_V1, 'P-value': p_values_V1})
+
+# Apply Benjamini-Hochberg correction to the p-values
+wilcoxon_results_V1['P-value_corrected']= multi.multipletests(wilcoxon_results_V1['P-value'], method='fdr_bh')[1]
+wilcoxon_results_V1= pd.DataFrame(wilcoxon_results_V1)
+
+# Add a column with the average z-score so that we know the polarity of the effect
+wilcoxon_results_V1 = wilcoxon_results_V1.merge(pd.DataFrame(pat_zdiff_V1.mean(),columns=['Mean']), left_on='IDP', right_index=True)
+wilcoxon_results_V1 = wilcoxon_results_V1.merge(pd.DataFrame(pat_zdiff_V1.median(),columns=['Median']), left_on='IDP', right_index=True)
+
+wilcoxon_results_V1=wilcoxon_results_V1.set_index('IDP')
+
+
+
+    ## For V2 ##
+# Create empty lists to store the results
+columns_V2= []
+w_statistics_V2= []
+p_values_V2= []
+
+# Loop through each column in the DataFrame
+pat_zdiff_V2=pat_zdiff_V2.dropna(axis=0, thresh=10)
+
+cols=pat_zdiff_V2.columns
+
+for index, column in enumerate(cols):
+    # Perform the Wilcoxon signed-rank test for the column against zero
+    w_stat, p_value= wilcoxon(pat_zdiff_V2[column], zero_method='zsplit')
+
+    # Store the results in the lists
+    columns_V2.append(column)
+    w_statistics_V2.append(w_stat)
+    p_values_V2.append(p_value)
+
+# Create a new DataFrame from the lists
+wilcoxon_results_V2= pd.DataFrame({'IDP': columns_V2, 'W-statistic': w_statistics_V2, 'P-value': p_values_V2})
+
+# Apply Benjamini-Hochberg correction to the p-values
+wilcoxon_results_V2['P-value_corrected']= multi.multipletests(wilcoxon_results_V2['P-value'], method='fdr_bh')[1]
+wilcoxon_results_V2= pd.DataFrame(wilcoxon_results_V2)
+
+# Add a column with the average z-score so that we know the polarity of the effect
+wilcoxon_results_V2 = wilcoxon_results_V2.merge(pd.DataFrame(pat_zdiff_V2.mean(),columns=['Mean']), left_on='IDP', right_index=True)
+wilcoxon_results_V2 = wilcoxon_results_V2.merge(pd.DataFrame(pat_zdiff_V2.median(),columns=['Median']), left_on='IDP', right_index=True)
+
+wilcoxon_results_V2=wilcoxon_results_V2.set_index('IDP')
+
+    ## For V3 ##
+# Create empty lists to store the results
+columns_V3= []
+w_statistics_V3= []
+p_values_V3= []
+
+# Loop through each column in the DataFrame
+pat_zdiff_V3=pat_zdiff_V3.dropna(axis=0, thresh=10)
+
+cols=pat_zdiff_V3.columns
+
+for index, column in enumerate(cols):
+    # Perform the Wilcoxon signed-rank test for the column against zero
+    w_stat, p_value= wilcoxon(pat_zdiff_V3[column], zero_method='zsplit')
+
+    # Store the results in the lists
+    columns_V3.append(column)
+    w_statistics_V3.append(w_stat)
+    p_values_V3.append(p_value)
+
+# Create a new DataFrame from the lists
+wilcoxon_results_V3= pd.DataFrame({'IDP': columns_V3, 'W-statistic': w_statistics_V3, 'P-value': p_values_V3})
+
+# Apply Benjamini-Hochberg correction to the p-values
+wilcoxon_results_V3['P-value_corrected']= multi.multipletests(wilcoxon_results_V3['P-value'], method='fdr_bh')[1]
+wilcoxon_results_V3= pd.DataFrame(wilcoxon_results_V3)
+
+# Add a column with the average z-score so that we know the polarity of the effect
+wilcoxon_results_V3 = wilcoxon_results_V3.merge(pd.DataFrame(pat_zdiff_V3.mean(),columns=['Mean']), left_on='IDP', right_index=True)
+wilcoxon_results_V3 = wilcoxon_results_V3.merge(pd.DataFrame(pat_zdiff_V3.median(),columns=['Median']), left_on='IDP', right_index=True)
+
+wilcoxon_results_V3= wilcoxon_results_V3.set_index('IDP')
+
+    ## For V4 ##
+# Create empty lists to store the results
+columns_V4= []
+w_statistics_V4= []
+p_values_V4= []
+
+# Loop through each column in the DataFrame
+pat_zdiff_V4=pat_zdiff_V4.dropna(axis=0, thresh=10)
+
+cols=pat_zdiff_V4.columns
+
+
+for index, column in enumerate(cols):
+    # Perform the Wilcoxon signed-rank test for the column against zero
+    w_stat, p_value= wilcoxon(pat_zdiff_V4[column], zero_method='zsplit')
+
+    # Store the results in the lists
+    columns_V4.append(column)
+    w_statistics_V4.append(w_stat)
+    p_values_V4.append(p_value)
+
+# Create a new DataFrame from the lists
+wilcoxon_results_V4= pd.DataFrame({'IDP': columns_V4, 'W-statistic': w_statistics_V4, 'P-value': p_values_V4})
+
+# Apply Benjamini-Hochberg correction to the p-values
+wilcoxon_results_V4['P-value_corrected']= multi.multipletests(wilcoxon_results_V4['P-value'], method='fdr_bh')[1]
+wilcoxon_results_V4= pd.DataFrame(wilcoxon_results_V4)
+
+# Add a column with the average z-score so that we know the polarity of the effect
+wilcoxon_results_V4= wilcoxon_results_V4.merge(pd.DataFrame(pat_zdiff_V4.mean(),columns=['Mean']), left_on='IDP', right_index=True)
+wilcoxon_results_V4= wilcoxon_results_V4.merge(pd.DataFrame(pat_zdiff_V4.median(),columns=['Median']), left_on='IDP', right_index=True)
+
+wilcoxon_results_V4=wilcoxon_results_V4.set_index('IDP')
+
+
+    ## Additionally, we divide the V1 results dataset into two subsets, one for each cohort ##
+## Wilcoxon tests are done for each of these
+pat_zdiff_V1_P1 = pat_zdiff_V1[pat_zdiff_V1.index.str.contains("FEP_PECANS_identifier") == True]
+pat_zdiff_V1_P2 = pat_zdiff_V1[pat_zdiff_V1.index.str.contains("FEP_PECANSII_identifier") == True]
+
+# Wilcoxon tests are also performed for each of these
+    # For V1, P1
+# Create empty lists to store the results
+columns_V1_P1= []
+w_statistics_V1_P1= []
+p_values_V1_P1= []
+
+# Loop through each column in the DataFrame
+pat_zdiff_V1_P1=pat_zdiff_V1_P1.dropna(axis=0, thresh=10)
+
+cols=pat_zdiff_V1_P1.columns
+
+for index, column in enumerate(cols):
+    # Perform the Wilcoxon signed-rank test for the column against zero
+    w_stat, p_value= wilcoxon(pat_zdiff_V1_P1[column], zero_method='zsplit')
+
+    # Store the results in the lists
+    columns_V1_P1.append(column)
+    w_statistics_V1_P1.append(w_stat)
+    p_values_V1_P1.append(p_value)
+
+# Create a new DataFrame from the lists
+wilcoxon_results_V1_P1= pd.DataFrame({'IDP': columns_V1_P1, 'W-statistic': w_statistics_V1_P1, 'P-value': p_values_V1_P1})
+
+# Apply Benjamini-Hochberg correction to the p-values
+wilcoxon_results_V1_P1['P-value_corrected']= multi.multipletests(wilcoxon_results_V1_P1['P-value'], method='fdr_bh')[1]
+wilcoxon_results_V1_P1= pd.DataFrame(wilcoxon_results_V1_P1)
+
+# Add a column with the average z-score so that we know the polarity of the effect
+wilcoxon_results_V1_P1= wilcoxon_results_V1_P1.merge(pd.DataFrame(pat_zdiff_V1_P1.mean(),columns=['Mean']), left_on='IDP', right_index=True)
+wilcoxon_results_V1_P1= wilcoxon_results_V1_P1.merge(pd.DataFrame(pat_zdiff_V1_P1.median(),columns=['Median']), left_on='IDP', right_index=True)
+
+wilcoxon_results_V1_P1=wilcoxon_results_V1_P1.set_index('IDP')
+
+    # For V1, P2
+# Create empty lists to store the results
+columns_V1_P2= []
+w_statistics_V1_P2= []
+p_values_V1_P2= []
+
+# Loop through each column in the DataFrame
+pat_zdiff_V1_P2=pat_zdiff_V1_P2.dropna(axis=0, thresh=10)
+
+cols=pat_zdiff_V1_P2.columns
+
+for index, column in enumerate(cols):
+    # Perform the Wilcoxon signed-rank test for the column against zero
+    w_stat, p_value= wilcoxon(pat_zdiff_V1_P2[column], zero_method='zsplit')
+
+    # Store the results in the lists
+    columns_V1_P2.append(column)
+    w_statistics_V1_P2.append(w_stat)
+    p_values_V1_P2.append(p_value)
+
+# Create a new DataFrame from the lists
+wilcoxon_results_V1_P2= pd.DataFrame({'IDP': columns_V1_P2, 'W-statistic': w_statistics_V1_P2, 'P-value': p_values_V1_P2})
+
+# Apply Benjamini-Hochberg correction to the p-values
+wilcoxon_results_V1_P2['P-value_corrected']= multi.multipletests(wilcoxon_results_V1_P2['P-value'], method='fdr_bh')[1]
+wilcoxon_results_V1_P2= pd.DataFrame(wilcoxon_results_V1_P2)
+
+# Add a column with the average z-score so that we know the polarity of the effect
+wilcoxon_results_V1_P2= wilcoxon_results_V1_P2.merge(pd.DataFrame(pat_zdiff_V1_P2.mean(),columns=['Mean']), left_on='IDP', right_index=True)
+wilcoxon_results_V1_P2= wilcoxon_results_V1_P2.merge(pd.DataFrame(pat_zdiff_V1_P2.median(),columns=['Median']), left_on='IDP', right_index=True)
+
+wilcoxon_results_V1_P2=wilcoxon_results_V1_P2.set_index('IDP')
+
+# Save Zdiff results
+os.chdir("/braincharts/Longitudinal_data_folder/Results/")
+pat_zdiff_V1.to_csv("Pt_Zdiff_V1.csv")
+pat_zdiff_V2.to_csv("Pt_Zdiff_V2.csv")
+pat_zdiff_V3.to_csv("Pt_Zdiff_V3.csv")
+pat_zdiff_V4.to_csv("Pt_Zdiff_V4.csv")
+pat_zdiff_V1_P1.to_csv("Pt_Zdiff_V1_P1.csv")
+pat_zdiff_V1_P2.to_csv("Pt_Zdiff_V1_P2.csv")
+
+#Save wilcoxon results
+os.chdir("/braincharts/Longitudinal_data_folder/Results/")
+wilcoxon_results_V1.to_csv("wilcoxon_results_V1.csv")
+wilcoxon_results_V2.to_csv("wilcoxon_results_V2.csv")
+wilcoxon_results_V3.to_csv("wilcoxon_results_V3.csv")
+wilcoxon_results_V4.to_csv("wilcoxon_results_V4.csv")
+wilcoxon_results_V1_P1.to_csv("wilcoxon_results_V1_P1.csv")
+wilcoxon_results_V1_P2.to_csv("wilcoxon_results_V1_P2.csv")
+
+
+# Also save Zdiff and wilcoxon test results to excel files
+os.chdir("/Final_results/")
+pat_zdiff_V1.to_excel("Zdiff_V1.xlsx")
+pat_zdiff_V2.to_excel("Zdiff_V2.xlsx")
+pat_zdiff_V3.to_excel("Zdiff_V3.xlsx")
+pat_zdiff_V4.to_excel("Zdiff_V4.xlsx")
+pat_zdiff_V1_P1.to_excel("Zdiff_V1_P1.xlsx")
+pat_zdiff_V1_P2.to_excel("Zdiff_V1_P2.xlsx")
+
+
+os.chdir("/Final_results/")
+wilcoxon_results_V1.to_excel("Wilcoxon_results_V1.xlsx")
+wilcoxon_results_V2.to_excel("Wilcoxon_results_V2.xlsx")
+wilcoxon_results_V3.to_excel("Wilcoxon_results_V3.xlsx")
+wilcoxon_results_V4.to_excel("Wilcoxon_results_V4.xlsx")
+wilcoxon_results_V1_P1.to_excel("Wilcoxon_results_V1_P1.xlsx")
+wilcoxon_results_V1_P2.to_excel("Wilcoxon_results_V1_P2.xlsx")
+
+
+## Plot significant regions on a spatial map ###
+! pip install nilearn
+from nilearn import plotting
+from matplotlib.colors import ListedColormap
+import numpy as np
+
+#Select only statistically significant regions to plot
+wilcoxon_V1_map = wilcoxon_results_V1.loc[wilcoxon_results_V1['P-value_corrected']<0.05]
+wilcoxon_V2_map = wilcoxon_results_V2.loc[wilcoxon_results_V2['P-value_corrected']<0.05]
+wilcoxon_V3_map = wilcoxon_results_V3.loc[wilcoxon_results_V3['P-value_corrected']<0.05]
+wilcoxon_V4_map = wilcoxon_results_V4.loc[wilcoxon_results_V4['P-value_corrected']<0.05]
+wilcoxon_V1_P1_map = wilcoxon_results_V1_P1.loc[wilcoxon_results_V1_P1['P-value_corrected']<0.05]
+wilcoxon_V1_P2_map = wilcoxon_results_V1_P2.loc[wilcoxon_results_V1_P2['P-value_corrected']<0.05]
+
+os.chdir("/Final_results/")
+
+    ## V1 results ##
+# Plot the results for the left hemisphere
+data_mapping, view, fs_plot, fs_sulc = prepare_destrieux_plotting(wilcoxon_V1_map['Mean'].to_frame(), hemi='l', method='counts')
+plotting.view_surf(fs_plot, data_mapping, threshold=None, cmap='RdBu_r', bg_map=fs_sulc, vmax=1).save_as_html("Wilcox_V1_lh_map.html")
+
+# Plot the results for the right hemisphere
+data_mapping, view, fs_plot, fs_sulc = prepare_destrieux_plotting(wilcoxon_V1_map['Mean'].to_frame(), hemi='r', method='counts')
+plotting.view_surf(fs_plot, data_mapping, threshold=None, cmap='RdBu_r', bg_map=fs_sulc, vmax=1).save_as_html("Wilcox_V1_rh_map.html")
+
+# Plot the results for the left hemisphere
+data_mapping, view, fs_plot, fs_sulc = prepare_destrieux_plotting(wilcoxon_V1_P1_map['Mean'].to_frame(), hemi='l', method='counts')
+plotting.view_surf(fs_plot, data_mapping, threshold=None, cmap='RdBu_r', bg_map=fs_sulc, vmax=1).save_as_html("Wilcox_V1_P1_lh_map.html")
+
+# Plot the results for the right hemisphere
+data_mapping, view, fs_plot, fs_sulc = prepare_destrieux_plotting(wilcoxon_V1_P1_map['Mean'].to_frame(), hemi='r', method='counts')
+plotting.view_surf(fs_plot, data_mapping, threshold=None, cmap='RdBu_r', bg_map=fs_sulc, vmax=1).save_as_html("Wilcox_V1_P1_rh_map.html")
+
+# Plot the results for the left hemisphere
+data_mapping, view, fs_plot, fs_sulc = prepare_destrieux_plotting(wilcoxon_V1_P2_map['Mean'].to_frame(), hemi='l', method='counts')
+plotting.view_surf(fs_plot, data_mapping, threshold=None, cmap='RdBu_r', bg_map=fs_sulc, vmax=1).save_as_html("Wilcox_V1_P2_lh_map.html")
+
+# Plot the results for the right hemisphere
+data_mapping, view, fs_plot, fs_sulc = prepare_destrieux_plotting(wilcoxon_V1_P2_map['Mean'].to_frame(), hemi='r', method='counts')
+plotting.view_surf(fs_plot, data_mapping, threshold=None, cmap='RdBu_r', bg_map=fs_sulc, vmax=1).save_as_html("Wilcox_V1_P2_rh_map.html")
+
+    ## V2 results ##
+# Plot the results for the left hemisphere
+data_mapping, view, fs_plot, fs_sulc = prepare_destrieux_plotting(wilcoxon_V2_map['Mean'].to_frame(), hemi='l', method='counts')
+plotting.view_surf(fs_plot, data_mapping, threshold=None, cmap='RdBu_r', bg_map=fs_sulc, vmax=1).save_as_html("Wilcox_V2_lh_map.html")
+
+# Plot the results for the right hemisphere
+data_mapping, view, fs_plot, fs_sulc = prepare_destrieux_plotting(wilcoxon_V2_map['Mean'].to_frame(), hemi='r', method='counts')
+plotting.view_surf(fs_plot, data_mapping, threshold=None, cmap='RdBu_r', bg_map=fs_sulc, vmax=1).save_as_html("Wilcox_V2_rh_map.html")
+
+    ## V3 results ##
+# Plot the results for the left hemisphere
+data_mapping, view, fs_plot, fs_sulc = prepare_destrieux_plotting(wilcoxon_V3_map['Mean'].to_frame(), hemi='l', method='counts')
+plotting.view_surf(fs_plot, data_mapping, threshold=None, cmap='RdBu_r', bg_map=fs_sulc, vmax=2.1).save_as_html("Wilcox_V3_lh_map.html")
+
+# Plot the results for the right hemisphere
+data_mapping, view, fs_plot, fs_sulc = prepare_destrieux_plotting(wilcoxon_V3_map['Mean'].to_frame(), hemi='r', method='counts')
+plotting.view_surf(fs_plot, data_mapping, threshold=None, cmap='RdBu_r', bg_map=fs_sulc, vmax=2.1).save_as_html("Wilcox_V3_rh_map.html")
+
+    ## V4 results ##
+# Plot the results for the left hemisphere
+data_mapping, view, fs_plot, fs_sulc = prepare_destrieux_plotting(wilcoxon_V4_map['Mean'].to_frame(), hemi='l', method='counts')
+plotting.view_surf(fs_plot, data_mapping, threshold=None, cmap='RdBu_r', bg_map=fs_sulc, vmax=1).save_as_html("Wilcox_V4_lh_map.html")
+
+# Plot the results for the right hemisphere
+data_mapping, view, fs_plot, fs_sulc = prepare_destrieux_plotting(wilcoxon_V4_map['Mean'].to_frame(), hemi='r', method='counts')
+plotting.view_surf(fs_plot, data_mapping, threshold=None, cmap='RdBu_r', bg_map=fs_sulc, vmax=1).save_as_html("Wilcox_V4_rh_map.html")
+
+
+
+            ### 5. Check for sex differences in results ###
+# Check for sex differences in change from baseline (V0) to first follow-up (V1)
+# Get sex covariate
+os.chdir("/braincharts/baseline_data_folder/")
+covariate = pd.read_csv("baseline_data_file.csv", index_col=[0])
+sex = covariate.loc[:, ['Sex']]
+
+new_Zdiff_V1= pd.merge(pat_zdiff_V1, sex, left_index = True, right_index = True)
+new_Zdiff_V1_P1 = pd.merge(pat_zdiff_V1_P1, sex, left_index = True, right_index = True)
+new_Zdiff_V1_P2 = pd.merge(pat_zdiff_V1_P2, sex, left_index = True, right_index = True)
+
+# All three wilcoxon for men #
+men_V1 = new_Zdiff_V1.loc[new_Zdiff_V1["Sex"]==1]
+men_V1 = men_V1.drop(['Sex'], axis=1)
+women_V1 = new_Zdiff_V1.loc[new_Zdiff_V1["Sex"]==0]
+women_V1 = women_V1.drop(['Sex'], axis=1)
+
+men_V1_P1 = new_Zdiff_V1_P1.loc[new_Zdiff_V1_P1["Sex"]==1]
+men_V1_P1 = men_V1_P1.drop(['Sex'], axis=1)
+women_V1_P1 = new_Zdiff_V1_P1.loc[new_Zdiff_V1_P1["Sex"]==0]
+women_V1_P1 = women_V1_P1.drop(['Sex'], axis=1)
+
+men_V1_P2 = new_Zdiff_V1_P2.loc[new_Zdiff_V1_P2["Sex"]==1]
+men_V1_P2 = men_V1_P2.drop(['Sex'], axis=1)
+women_V1_P2 = new_Zdiff_V1_P2.loc[new_Zdiff_V1_P2["Sex"]==0]
+women_V1_P2 = women_V1_P2.drop(['Sex'], axis=1)
+
+# For men in both cohorts
+columns = []
+w_statistics = []
+p_values = []
+
+men_V1=men_V1.dropna(axis=0, thresh=10)
+
+cols=men_V1.columns
+
+for index, column in enumerate(cols):
+    w_stat, p_value= wilcoxon(men_V1[column], zero_method='zsplit')
+    columns.append(column)
+    w_statistics.append(w_stat)
+    p_values.append(p_value)
+
+wilcoxon_results_V1_M= pd.DataFrame({'IDP': columns, 'W-statistic': w_statistics, 'P-value': p_values})
+wilcoxon_results_V1_M['P-value_corrected']= multi.multipletests(wilcoxon_results_V1_M['P-value'], method='fdr_bh')[1]
+wilcoxon_results_V1_M= pd.DataFrame(wilcoxon_results_V1_M)
+wilcoxon_results_V1_M= wilcoxon_results_V1_M.merge(pd.DataFrame(men_V1.mean(),columns=['Mean']), left_on='IDP', right_index=True)
+wilcoxon_results_V1_M= wilcoxon_results_V1_M.merge(pd.DataFrame(men_V1.median(),columns=['Median']), left_on='IDP', right_index=True)
+wilcoxon_results_V1_M=wilcoxon_results_V1_M.set_index('IDP')
+
+# For men in PECANS
+columns = []
+w_statistics = []
+p_values = []
+
+men_V1_P1=men_V1_P1.dropna(axis=0, thresh=10)
+
+cols=men_V1_P1.columns
+
+for index, column in enumerate(cols):
+    w_stat, p_value= wilcoxon(men_V1_P1[column], zero_method='zsplit')
+    columns.append(column)
+    w_statistics.append(w_stat)
+    p_values.append(p_value)
+
+wilcoxon_results_V1_P1_M= pd.DataFrame({'IDP': columns, 'W-statistic': w_statistics, 'P-value': p_values})
+wilcoxon_results_V1_P1_M['P-value_corrected']= multi.multipletests(wilcoxon_results_V1_P1_M['P-value'], method='fdr_bh')[1]
+wilcoxon_results_V1_P1_M= pd.DataFrame(wilcoxon_results_V1_P1_M)
+wilcoxon_results_V1_P1_M= wilcoxon_results_V1_P1_M.merge(pd.DataFrame(men_V1_P1.mean(),columns=['Mean']), left_on='IDP', right_index=True)
+wilcoxon_results_V1_P1_M= wilcoxon_results_V1_P1_M.merge(pd.DataFrame(men_V1_P1.median(),columns=['Median']), left_on='IDP', right_index=True)
+wilcoxon_results_V1_P1_M=wilcoxon_results_V1_P1_M.set_index('IDP')
+
+# For men in PECANSII
+columns = []
+w_statistics = []
+p_values = []
+
+men_V1_P2=men_V1_P2.dropna(axis=0, thresh=10)
+
+cols=men_V1_P2.columns
+
+for index, column in enumerate(cols):
+    w_stat, p_value= wilcoxon(men_V1_P2[column], zero_method='zsplit')
+    columns.append(column)
+    w_statistics.append(w_stat)
+    p_values.append(p_value)
+
+wilcoxon_results_V1_P2_M= pd.DataFrame({'IDP': columns, 'W-statistic': w_statistics, 'P-value': p_values})
+wilcoxon_results_V1_P2_M['P-value_corrected']= multi.multipletests(wilcoxon_results_V1_P2_M['P-value'], method='fdr_bh')[1]
+wilcoxon_results_V1_P2_M= pd.DataFrame(wilcoxon_results_V1_P2_M)
+wilcoxon_results_V1_P2_M= wilcoxon_results_V1_P2_M.merge(pd.DataFrame(men_V1_P2.mean(),columns=['Mean']), left_on='IDP', right_index=True)
+wilcoxon_results_V1_P2_M= wilcoxon_results_V1_P2_M.merge(pd.DataFrame(men_V1_P2.median(),columns=['Median']), left_on='IDP', right_index=True)
+wilcoxon_results_V1_P2_M=wilcoxon_results_V1_P2_M.set_index('IDP')
+
+# For women in both cohorts
+columns = []
+w_statistics = []
+p_values = []
+
+women_V1=women_V1.dropna(axis=0, thresh=10)
+
+cols=women_V1.columns
+
+for index, column in enumerate(cols):
+    w_stat, p_value= wilcoxon(women_V1[column], zero_method='zsplit')
+    columns.append(column)
+    w_statistics.append(w_stat)
+    p_values.append(p_value)
+
+wilcoxon_results_V1_F= pd.DataFrame({'IDP': columns, 'W-statistic': w_statistics, 'P-value': p_values})
+wilcoxon_results_V1_F['P-value_corrected']= multi.multipletests(wilcoxon_results_V1_F['P-value'], method='fdr_bh')[1]
+wilcoxon_results_V1_F= pd.DataFrame(wilcoxon_results_V1_F)
+wilcoxon_results_V1_F= wilcoxon_results_V1_F.merge(pd.DataFrame(women_V1.mean(),columns=['Mean']), left_on='IDP', right_index=True)
+wilcoxon_results_V1_F= wilcoxon_results_V1_F.merge(pd.DataFrame(women_V1.median(),columns=['Median']), left_on='IDP', right_index=True)
+wilcoxon_results_V1_F=wilcoxon_results_V1_F.set_index('IDP')
+
+# For women in PECANS
+columns = []
+w_statistics = []
+p_values = []
+
+women_V1_P1=women_V1_P1.dropna(axis=0, thresh=10)
+
+cols=women_V1_P1.columns
+
+for index, column in enumerate(cols):
+    w_stat, p_value= wilcoxon(women_V1_P1[column], zero_method='zsplit')
+    columns.append(column)
+    w_statistics.append(w_stat)
+    p_values.append(p_value)
+
+wilcoxon_results_V1_P1_F= pd.DataFrame({'IDP': columns, 'W-statistic': w_statistics, 'P-value': p_values})
+wilcoxon_results_V1_P1_F['P-value_corrected']= multi.multipletests(wilcoxon_results_V1_P1_F['P-value'], method='fdr_bh')[1]
+wilcoxon_results_V1_P1_F= pd.DataFrame(wilcoxon_results_V1_P1_F)
+wilcoxon_results_V1_P1_F= wilcoxon_results_V1_P1_F.merge(pd.DataFrame(women_V1_P1.mean(),columns=['Mean']), left_on='IDP', right_index=True)
+wilcoxon_results_V1_P1_F= wilcoxon_results_V1_P1_F.merge(pd.DataFrame(women_V1_P1.median(),columns=['Median']), left_on='IDP', right_index=True)
+wilcoxon_results_V1_P1_F=wilcoxon_results_V1_P1_F.set_index('IDP')
+
+
+# For women in PECANSII
+columns = []
+w_statistics = []
+p_values = []
+
+women_V1_P2=women_V1_P2.dropna(axis=0, thresh=10)
+
+cols=women_V1_P2.columns
+
+for index, column in enumerate(cols):
+    w_stat, p_value= wilcoxon(women_V1_P2[column], zero_method='zsplit')
+    columns.append(column)
+    w_statistics.append(w_stat)
+    p_values.append(p_value)
+
+wilcoxon_results_V1_P2_F= pd.DataFrame({'IDP': columns, 'W-statistic': w_statistics, 'P-value': p_values})
+wilcoxon_results_V1_P2_F['P-value_corrected']= multi.multipletests(wilcoxon_results_V1_P2_F['P-value'], method='fdr_bh')[1]
+wilcoxon_results_V1_P2_F= pd.DataFrame(wilcoxon_results_V1_P2_F)
+wilcoxon_results_V1_P2_F= wilcoxon_results_V1_P2_F.merge(pd.DataFrame(women_V1_P2.mean(),columns=['Mean']), left_on='IDP', right_index=True)
+wilcoxon_results_V1_P2_F= wilcoxon_results_V1_P2_F.merge(pd.DataFrame(women_V1_P2.median(),columns=['Median']), left_on='IDP', right_index=True)
+wilcoxon_results_V1_P2_F=wilcoxon_results_V1_P2_F.set_index('IDP')
+
+
+
+# Save wilcoxon results as csvs and excel files
+os.chdir("/braincharts/Longitudinal_data_folder/Results/")
+wilcoxon_results_V1_M.to_csv("wilcoxon_results_V1_M.csv")
+wilcoxon_results_V1_F.to_csv("wilcoxon_results_V1_F.csv")
+wilcoxon_results_V1_P1_M.to_csv("wilcoxon_results_V1_P1_M.csv")
+wilcoxon_results_V1_P1_F.to_csv("wilcoxon_results_V1_P1_F.csv")
+wilcoxon_results_V1_P2_M.to_csv("wilcoxon_results_V1_P2_M.csv")
+wilcoxon_results_V1_P2_F.to_csv("wilcoxon_results_V1_P2_F.csv")
+
+os.chdir("/Final_results/")
+wilcoxon_results_V1_M.to_excel("Wilcoxon_results_V1_M.xlsx")
+wilcoxon_results_V1_F.to_excel("Wilcoxon_results_V1_F.xlsx")
+wilcoxon_results_V1_P1_M.to_excel("Wilcoxon_results_V1_P1_M.xlsx")    
+wilcoxon_results_V1_P1_F.to_excel("Wilcoxon_results_V1_P1_F.xlsx")
+wilcoxon_results_V1_P2_M.to_excel("Wilcoxon_results_V1_P2_M.xlsx")    
+wilcoxon_results_V1_P2_F.to_excel("Wilcoxon_results_V1_P2_F.xlsx")
