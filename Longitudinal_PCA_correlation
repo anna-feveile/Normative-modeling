@@ -1,1 +1,238 @@
+           ### Principal component analysis (PCA) of Zdiff scores ###
+# Import the necessary libraries
+import pandas as pd
+import os
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+import scipy.stats
 
+
+# Load Zdiff files
+os.chdir("/braincharts/Longitudinal_data_folder/Results/")
+Zdiff_V1 = pd.read_csv("Pt_Zdiff_V1.csv", index_col=0)
+Zdiff_V1_P1 = pd.read_csv("Pt_Zdiff_V1_P1.csv", index_col=0)
+Zdiff_V1_P2 = pd.read_csv("Pt_Zdiff_V1_P2.csv", index_col=0)
+Zdiff_V2 = pd.read_csv("Pt_Zdiff_V2.csv", index_col=0)
+Zdiff_V3 = pd.read_csv("Pt_Zdiff_V3.csv", index_col=0)
+Zdiff_V4 = pd.read_csv("Pt_Zdiff_V4.csv", index_col=0)
+
+# Load PANSS scores
+os.chdir("/braincharts/baseline_data_folder/")
+PANSS_V1 = pd.read_csv("PANSS_diff_V1.csv", index_col=0)
+PANSS_V2 = pd.read_csv("PANSS_diff_V2.csv", index_col=0)
+PANSS_V3 = pd.read_csv("PANSS_diff_V3.csv", index_col=0)
+PANSS_V4 = pd.read_csv("PANSS_diff_V4.csv", index_col=0)
+
+
+# PCA: reduce data dimensionality into 10 principal components and merge PCA with PANSS scores
+std_scaler = StandardScaler()
+V1_scaled = std_scaler.fit_transform(Zdiff_V1)
+
+pca = PCA(n_components=10)
+pca_features_V1 = pca.fit_transform(V1_scaled)
+
+pca_V1 = pd.DataFrame(data=pca_features_V1, columns=["PC1", "PC2", "PC3", "PC4", "PC5", "PC6", "PC7", "PC8", "PC9", "PC10"], index=Zdiff_V1.index)
+pca_V1 = pca_V1.rename_axis("Id")
+
+merged_df = PANSS_V1.join(pca_V1)
+merged_df = merged_df.dropna(axis=0, thresh=5)
+
+# Find explained variance ratio
+explained_variance_ratio = pca.explained_variance_ratio_
+print(explained_variance_ratio)
+cumulative_explained_variance_ratio = pca.explained_variance_ratio_.cumsum()
+print(cumulative_explained_variance_ratio)
+
+PCA_summary = pd.DataFrame([explained_variance_ratio, cumulative_explained_variance_ratio])
+PCA_summary.columns = ["PC1", "PC2", "PC3", "PC4", "PC5", "PC6", "PC7", "PC8", "PC9", "PC10"]
+PCA_summary.index = ["Explained variance ratio", "Cumulative explained variance ratio"]
+
+
+# See the weight of each feature in each component
+components = pd.DataFrame(pca.components_)
+components.columns = Zdiff_V1.columns
+
+    # Find the most important feature in each component
+n_pcs= pca.components_.shape[0]
+most_important = [np.abs(pca.components_[i]).argmax() for i in range(n_pcs)]
+initial_feature_names = Zdiff_V1.columns
+most_important_names = [initial_feature_names[most_important[i]] for i in range(n_pcs)]
+
+dic = {'PC{}'.format(i): most_important_names[i] for i in range(n_pcs)}
+
+# Create dataframe
+important_components = pd.DataFrame(dic.items())
+
+
+            ### Principal component correlation with changes in PANSS scores ###
+
+# Principal component 1
+PC1_V1 = pd.DataFrame(index=["Total positive","Total negative", "Total general", "Total PANSS"], columns=["Statistic", "Pvalue"])
+    #Correlation with change in total positive PANSS
+PC1_V1["Statistic"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC1"], merged_df["Total positive"], axis=0).statistic
+PC1_V1["Pvalue"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC1"], merged_df["Total positive"], axis=0).pvalue
+    #Correlation with change in total negative PANSS
+PC1_V1["Statistic"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC1"], merged_df["Total negative"], axis=0).statistic
+PC1_V1["Pvalue"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC1"], merged_df["Total negative"], axis=0).pvalue
+    #Correlation with change in total general PANSS
+PC1_V1["Statistic"]["Total general"]=scipy.stats.spearmanr(merged_df["PC1"], merged_df["Total general"], axis=0).statistic
+PC1_V1["Pvalue"]["Total general"]=scipy.stats.spearmanr(merged_df["PC1"], merged_df["Total general"], axis=0).pvalue
+    #Correlation with change in total PANSS
+PC1_V1["Statistic"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC1"], merged_df["Total PANSS"], axis=0).statistic
+PC1_V1["Pvalue"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC1"], merged_df["Total PANSS"], axis=0).pvalue
+
+# Principal component 2
+PC2_V1 = pd.DataFrame(index=["Total positive","Total negative", "Total general", "Total PANSS"], columns=["Statistic", "Pvalue"])
+    #Correlation with change in total positive PANSS
+PC2_V1["Statistic"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC2"], merged_df["Total positive"], axis=0).statistic
+PC2_V1["Pvalue"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC2"], merged_df["Total positive"], axis=0).pvalue
+    #Correlation with change in total negative PANSS
+PC2_V1["Statistic"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC2"], merged_df["Total negative"], axis=0).statistic
+PC2_V1["Pvalue"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC2"], merged_df["Total negative"], axis=0).pvalue
+    #Correlation with change in total general PANSS
+PC2_V1["Statistic"]["Total general"]=scipy.stats.spearmanr(merged_df["PC2"], merged_df["Total general"], axis=0).statistic
+PC2_V1["Pvalue"]["Total general"]=scipy.stats.spearmanr(merged_df["PC2"], merged_df["Total general"], axis=0).pvalue
+    #Correlation with change in total PANSS
+PC2_V1["Statistic"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC2"], merged_df["Total PANSS"], axis=0).statistic
+PC2_V1["Pvalue"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC2"], merged_df["Total PANSS"], axis=0).pvalue
+
+# Principal component 3
+PC3_V1 = pd.DataFrame(index=["Total positive","Total negative", "Total general", "Total PANSS"], columns=["Statistic", "Pvalue"])
+    #Correlation with change in total positive PANSS
+PC3_V1["Statistic"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC3"], merged_df["Total positive"], axis=0).statistic
+PC3_V1["Pvalue"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC3"], merged_df["Total positive"], axis=0).pvalue
+    #Correlation with change in total negative PANSS
+PC3_V1["Statistic"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC3"], merged_df["Total negative"], axis=0).statistic
+PC3_V1["Pvalue"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC3"], merged_df["Total negative"], axis=0).pvalue
+    #Correlation with change in total general PANSS
+PC3_V1["Statistic"]["Total general"]=scipy.stats.spearmanr(merged_df["PC3"], merged_df["Total general"], axis=0).statistic
+PC3_V1["Pvalue"]["Total general"]=scipy.stats.spearmanr(merged_df["PC3"], merged_df["Total general"], axis=0).pvalue
+    #Correlation with change in total PANSS
+PC3_V1["Statistic"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC3"], merged_df["Total PANSS"], axis=0).statistic
+PC3_V1["Pvalue"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC3"], merged_df["Total PANSS"], axis=0).pvalue
+
+# Principal component 4
+PC4_V1 = pd.DataFrame(index=["Total positive","Total negative", "Total general", "Total PANSS"], columns=["Statistic", "Pvalue"])
+    #Correlation with change in total positive PANSS
+PC4_V1["Statistic"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC4"], merged_df["Total positive"], axis=0).statistic
+PC4_V1["Pvalue"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC4"], merged_df["Total positive"], axis=0).pvalue
+    #Correlation with change in total negative PANSS
+PC4_V1["Statistic"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC4"], merged_df["Total negative"], axis=0).statistic
+PC4_V1["Pvalue"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC4"], merged_df["Total negative"], axis=0).pvalue
+    #Correlation with change in total general PANSS
+PC4_V1["Statistic"]["Total general"]=scipy.stats.spearmanr(merged_df["PC4"], merged_df["Total general"], axis=0).statistic
+PC4_V1["Pvalue"]["Total general"]=scipy.stats.spearmanr(merged_df["PC4"], merged_df["Total general"], axis=0).pvalue
+    #Correlation with change in total PANSS
+PC4_V1["Statistic"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC4"], merged_df["Total PANSS"], axis=0).statistic
+PC4_V1["Pvalue"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC4"], merged_df["Total PANSS"], axis=0).pvalue
+
+# Principal component 5
+PC5_V1 = pd.DataFrame(index=["Total positive","Total negative", "Total general", "Total PANSS"], columns=["Statistic", "Pvalue"])
+    #Correlation with change in total positive PANSS
+PC5_V1["Statistic"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC5"], merged_df["Total positive"], axis=0).statistic
+PC5_V1["Pvalue"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC5"], merged_df["Total positive"], axis=0).pvalue
+    #Correlation with change in total negative PANSS
+PC5_V1["Statistic"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC5"], merged_df["Total negative"], axis=0).statistic
+PC5_V1["Pvalue"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC5"], merged_df["Total negative"], axis=0).pvalue
+    #Correlation with change in total general PANSS
+PC5_V1["Statistic"]["Total general"]=scipy.stats.spearmanr(merged_df["PC5"], merged_df["Total general"], axis=0).statistic
+PC5_V1["Pvalue"]["Total general"]=scipy.stats.spearmanr(merged_df["PC5"], merged_df["Total general"], axis=0).pvalue
+    #Correlation with change in total PANSS
+PC5_V1["Statistic"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC5"], merged_df["Total PANSS"], axis=0).statistic
+PC5_V1["Pvalue"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC5"], merged_df["Total PANSS"], axis=0).pvalue
+
+# Principal component 6
+PC6_V1 = pd.DataFrame(index=["Total positive","Total negative", "Total general", "Total PANSS"], columns=["Statistic", "Pvalue"])
+    #Correlation with change in total positive PANSS
+PC6_V1["Statistic"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC6"], merged_df["Total positive"], axis=0).statistic
+PC6_V1["Pvalue"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC6"], merged_df["Total positive"], axis=0).pvalue
+    #Correlation with change in total negative PANSS
+PC6_V1["Statistic"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC6"], merged_df["Total negative"], axis=0).statistic
+PC6_V1["Pvalue"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC6"], merged_df["Total negative"], axis=0).pvalue
+    #Correlation with change in total general PANSS
+PC6_V1["Statistic"]["Total general"]=scipy.stats.spearmanr(merged_df["PC6"], merged_df["Total general"], axis=0).statistic
+PC6_V1["Pvalue"]["Total general"]=scipy.stats.spearmanr(merged_df["PC6"], merged_df["Total general"], axis=0).pvalue
+    #Correlation with change in total PANSS
+PC6_V1["Statistic"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC6"], merged_df["Total PANSS"], axis=0).statistic
+PC6_V1["Pvalue"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC6"], merged_df["Total PANSS"], axis=0).pvalue
+
+# Principal component 7
+PC7_V1 = pd.DataFrame(index=["Total positive","Total negative", "Total general", "Total PANSS"], columns=["Statistic", "Pvalue"])
+    #Correlation with change in total positive PANSS
+PC7_V1["Statistic"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC7"], merged_df["Total positive"], axis=0).statistic
+PC7_V1["Pvalue"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC7"], merged_df["Total positive"], axis=0).pvalue
+    #Correlation with change in total negative PANSS
+PC7_V1["Statistic"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC7"], merged_df["Total negative"], axis=0).statistic
+PC7_V1["Pvalue"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC7"], merged_df["Total negative"], axis=0).pvalue
+    #Correlation with change in total general PANSS
+PC7_V1["Statistic"]["Total general"]=scipy.stats.spearmanr(merged_df["PC7"], merged_df["Total general"], axis=0).statistic
+PC7_V1["Pvalue"]["Total general"]=scipy.stats.spearmanr(merged_df["PC7"], merged_df["Total general"], axis=0).pvalue
+    #Correlation with change in total total PANSS
+PC7_V1["Statistic"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC7"], merged_df["Total PANSS"], axis=0).statistic
+PC7_V1["Pvalue"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC7"], merged_df["Total PANSS"], axis=0).pvalue
+
+# Principal component 8
+PC8_V1 = pd.DataFrame(index=["Total positive","Total negative", "Total general", "Total PANSS"], columns=["Statistic", "Pvalue"])
+    #Correlation with change in total positive PANSS
+PC8_V1["Statistic"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC8"], merged_df["Total positive"], axis=0).statistic
+PC8_V1["Pvalue"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC8"], merged_df["Total positive"], axis=0).pvalue
+    #Correlation with change in total negative PANSS
+PC8_V1["Statistic"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC8"], merged_df["Total negative"], axis=0).statistic
+PC8_V1["Pvalue"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC8"], merged_df["Total negative"], axis=0).pvalue
+    #Correlation with change in total general PANSS
+PC8_V1["Statistic"]["Total general"]=scipy.stats.spearmanr(merged_df["PC8"], merged_df["Total general"], axis=0).statistic
+PC8_V1["Pvalue"]["Total general"]=scipy.stats.spearmanr(merged_df["PC8"], merged_df["Total general"], axis=0).pvalue
+    #Correlation with change in total PANSS
+PC8_V1["Statistic"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC8"], merged_df["Total PANSS"], axis=0).statistic
+PC8_V1["Pvalue"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC8"], merged_df["Total PANSS"], axis=0).pvalue
+
+# Principal component 9
+PC9_V1 = pd.DataFrame(index=["Total positive","Total negative", "Total general", "Total PANSS"], columns=["Statistic", "Pvalue"])
+    #Correlation with change in total positive PANSS
+PC9_V1["Statistic"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC9"], merged_df["Total positive"], axis=0).statistic
+PC9_V1["Pvalue"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC9"], merged_df["Total positive"], axis=0).pvalue
+    #Correlation with change in total negative PANSS
+PC9_V1["Statistic"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC9"], merged_df["Total negative"], axis=0).statistic
+PC9_V1["Pvalue"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC9"], merged_df["Total negative"], axis=0).pvalue
+    #Correlation with change in total general PANSS
+PC9_V1["Statistic"]["Total general"]=scipy.stats.spearmanr(merged_df["PC9"], merged_df["Total general"], axis=0).statistic
+PC9_V1["Pvalue"]["Total general"]=scipy.stats.spearmanr(merged_df["PC9"], merged_df["Total general"], axis=0).pvalue
+    #Correlation with change in total PANSS
+PC9_V1["Statistic"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC9"], merged_df["Total PANSS"], axis=0).statistic
+PC9_V1["Pvalue"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC9"], merged_df["Total PANSS"], axis=0).pvalue
+
+# Principal component 10
+PC10_V1 = pd.DataFrame(index=["Total positive","Total negative", "Total general", "Total PANSS"], columns=["Statistic", "Pvalue"])
+    #Correlation with change in total positive PANSS
+PC10_V1["Statistic"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC10"], merged_df["Total positive"], axis=0).statistic
+PC10_V1["Pvalue"]["Total positive"]=scipy.stats.spearmanr(merged_df["PC10"], merged_df["Total positive"], axis=0).pvalue
+    #Correlation with change in total negative PANSS
+PC10_V1["Statistic"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC10"], merged_df["Total negative"], axis=0).statistic
+PC10_V1["Pvalue"]["Total negative"]=scipy.stats.spearmanr(merged_df["PC10"], merged_df["Total negative"], axis=0).pvalue
+    #Correlation with change in total general PANSS
+PC10_V1["Statistic"]["Total general"]=scipy.stats.spearmanr(merged_df["PC10"], merged_df["Total general"], axis=0).statistic
+PC10_V1["Pvalue"]["Total general"]=scipy.stats.spearmanr(merged_df["PC10"], merged_df["Total general"], axis=0).pvalue
+    #Correlation with change in total PANSS
+PC10_V1["Statistic"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC10"], merged_df["Total PANSS"], axis=0).statistic
+PC10_V1["Pvalue"]["Total PANSS"]=scipy.stats.spearmanr(merged_df["PC10"], merged_df["Total PANSS"], axis=0).pvalue
+
+
+
+# Save dataframes
+os.chdir("/Final_results/")
+
+PCA_summary.to_excel("PCA_summary.xlsx")
+components.to_excel("PCA components.xlsx")
+important_components.to_excel("Important_components.xlsx")
+
+PC1_V1.to_excel("PC1_PANSS.xlsx")
+PC2_V1.to_excel("PC2_PANSS.xlsx")
+PC3_V1.to_excel("PC3_PANSS.xlsx")
+PC4_V1.to_excel("PC4_PANSS.xlsx")
+PC5_V1.to_excel("PC5_PANSS.xlsx")
+PC6_V1.to_excel("PC6_PANSS.xlsx")
+PC7_V1.to_excel("PC7_PANSS.xlsx")
+PC8_V1.to_excel("PC8_PANSS.xlsx")
+PC9_V1.to_excel("PC9_PANSS.xlsx")
+PC10_V1.to_excel("PC10_PANSS.xlsx")
