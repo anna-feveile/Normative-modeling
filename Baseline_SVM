@@ -1,1 +1,180 @@
+            ### SVM CLASSIFICATION ###
+#Import necessary libraries
+import pandas as pd
+import numpy as np
+import os
+import matplotlib.pyplot as plt
+from sklearn import svm, preprocessing
+from sklearn.metrics import auc
+from sklearn.metrics import RocCurveDisplay
+from sklearn.model_selection import StratifiedKFold, permutation_test_score
+from sklearn.pipeline import Pipeline
 
+#Create dataframe containing deviation scores from both HCs and Pt:
+os.chdir("/braincharts/models/lifespan_57K_82sites/deviation_scores_HC/")
+Z_HC=pd.read_csv("Baseline_HC_deviation_scores.csv", index_col=[0])
+Z_HC['Group'] = Z_HC['Group'].replace(0, 'HC')
+Z_HC.columns = Z_HC.columns.str.replace("_Z_HC", "_Z_predict", regex=True)
+
+os.chdir("/braincharts/models/lifespan_57K_82sites/deviation_scores_Pt/")
+Z_Pt=pd.read_csv("Baseline_Pt_deviation_scores.csv", index_col=[0])
+Z_Pt['Group'] = Z_Pt['Group'].replace(1, 'SCZ')
+Z_Pt.columns = Z_Pt.columns.str.replace("_Z_Pt", "_Z_predict", regex=True)
+
+# Merge dataframes
+dataframes=[Z_HC, Z_Pt]
+Z_df=pd.concat(dataframes)
+
+
+# Drop any rows without group variable
+Z_df.dropna(subset=['Group'], inplace=True)
+
+# Change group variable to binary
+Z_df['Group'] = Z_df['Group'].replace("HC",0)
+Z_df['Group'] = Z_df['Group'].replace("SCZ",1)
+
+# Choose columns containing Z-scores
+deviations = Z_df.loc[:, Z_df.columns.str.contains('Z_predict')]
+
+
+# Choose columns containing IDPs
+data_dir = "/braincharts/baseline_data_folder"
+
+with open(os.path.join(data_dir, "P_phenotypes_ct_lh.txt")) as f:
+    idp_ids_lh = f.read().splitlines()
+with open(os.path.join(data_dir, "P_phenotypes_ct_rh.txt")) as f:
+    idp_ids_rh = f.read().splitlines()
+with open(os.path.join(data_dir, "P_phenotypes_sc.txt")) as f:
+    idp_ids_sc = f.read().splitlines()
+
+idp_ids = idp_ids_lh + idp_ids_rh + idp_ids_sc
+
+IDPs= Z_df.loc[:, idp_ids]
+
+
+# Data IO and generation
+X1 = deviations
+X2 = IDPs
+y = Z_df['Group']
+n_samples, n_features = X1.shape
+random_state = 25
+
+X1 = X1.to_numpy()
+
+X2 = X2.to_numpy()
+
+y = y.astype(int)
+
+y = y.to_numpy()
+
+        ## SVM using deviation scores as features ##
+# Run classifier with cross-validation and plot ROC curves
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=random_state)
+classifier = svm.SVC(kernel='linear', probability=True,
+                     random_state=random_state)
+
+tprs = []
+aucs = []
+mean_fpr = np.linspace(0, 1, 100)
+
+fig, ax = plt.subplots(figsize=(15,15))
+parameters = {'axes.labelsize': 20,
+          'axes.titlesize': 25, 'xtick.labelsize':16,'ytick.labelsize':16,'legend.fontsize':14,'legend.title_fontsize':16}
+plt.rcParams.update(parameters)
+
+for i, (train, test) in enumerate(cv.split(X1, y)):
+    classifier.fit(X1[train], y[train])
+    viz = RocCurveDisplay.from_estimator(classifier, X1[test], y[test],
+                         name='ROC fold {}'.format(i),
+                         alpha=0.3, lw=1, ax=ax)
+    interp_tpr = np.interp(mean_fpr, viz.fpr, viz.tpr)
+    interp_tpr[0] = 0.0
+    tprs.append(interp_tpr)
+    aucs.append(viz.roc_auc)
+
+ax.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r',
+        label='Chance', alpha=.8)
+
+mean_tpr = np.mean(tprs, axis=0)
+mean_tpr[-1] = 1.0
+mean_auc = auc(mean_fpr, mean_tpr)
+std_auc = np.std(aucs)
+ax.plot(mean_fpr, mean_tpr, color='b',
+        label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc),
+        lw=2, alpha=.8)
+
+std_tpr = np.std(tprs, axis=0)
+tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
+tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
+ax.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
+                label=r'$\pm$ 1 std. dev.')
+
+ax.set(xlim=[-0.05, 1.05], ylim=[-0.05, 1.05])
+ax.set_title('Receiver operating characteristic FEP vs. HC (deviation scores)', fontweight="bold", size=20)
+ax.legend(loc="lower right")
+plt.show()
+
+
+#Calculate score and p-value
+score, permutation_scores, pvalue = permutation_test_score(classifier, X1, y, cv=cv, scoring = "roc_auc", n_permutations=1000, random_state=random_state)
+
+print(score)
+print(pvalue)
+
+        ## SVM using IDPs as features ##
+# Run classifier with cross-validation and plot ROC curves
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=random_state)
+
+from sklearn.pipeline import Pipeline
+
+tprs = []
+aucs = []
+mean_fpr = np.linspace(0, 1, 100)
+
+fig, ax = plt.subplots(figsize=(15,15))
+parameters = {'axes.labelsize': 20,
+          'axes.titlesize': 25, 'xtick.labelsize':16,'ytick.labelsize':16,'legend.fontsize':14,'legend.title_fontsize':16}
+plt.rcParams.update(parameters)
+
+for i, (train, test) in enumerate(cv.split(X2, y)):
+    Train_data = X2[train]
+    Test_data = X2[test]
+    
+    pipe = Pipeline([('scalar', preprocessing.StandardScaler()), ('svc', svm.SVC(kernel='linear', probability=True,
+                         random_state=random_state))]) # pipeline is used to standardize IDPs
+    
+    pipe.fit(Train_data, y[train])
+    viz = RocCurveDisplay.from_estimator(pipe, Test_data, y[test],
+                         name='ROC fold {}'.format(i),
+                         alpha=0.3, lw=1, ax=ax)
+    interp_tpr = np.interp(mean_fpr, viz.fpr, viz.tpr)
+    interp_tpr[0] = 0.0
+    tprs.append(interp_tpr)
+    aucs.append(viz.roc_auc)
+
+ax.plot([0, 1], [0, 1], linestyle='--', lw=2, color='r',
+        label='Chance', alpha=.8)
+
+mean_tpr = np.mean(tprs, axis=0)
+mean_tpr[-1] = 1.0
+mean_auc = auc(mean_fpr, mean_tpr)
+std_auc = np.std(aucs)
+ax.plot(mean_fpr, mean_tpr, color='b',
+        label=r'Mean ROC (AUC = %0.2f $\pm$ %0.2f)' % (mean_auc, std_auc),
+        lw=2, alpha=.8)
+
+std_tpr = np.std(tprs, axis=0)
+tprs_upper = np.minimum(mean_tpr + std_tpr, 1)
+tprs_lower = np.maximum(mean_tpr - std_tpr, 0)
+ax.fill_between(mean_fpr, tprs_lower, tprs_upper, color='grey', alpha=.2,
+                label=r'$\pm$ 1 std. dev.')
+
+ax.set(xlim=[-0.05, 1.05], ylim=[-0.05, 1.05])
+ax.set_title('Receiver operating characteristic FEP vs. HC (IDPs)', fontweight="bold", size=20)
+ax.legend(loc="lower right")
+plt.show()
+
+#Calculate score and p-value
+score, permutation_scores, pvalue = permutation_test_score(pipe, X2, y, cv=cv, scoring = "roc_auc", n_permutations=1000, random_state=random_state)
+print(score)
+print(IDP_pvalue)
