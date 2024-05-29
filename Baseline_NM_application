@@ -1,4 +1,6 @@
 """
+# Based on script from PCNtoolkit: https://github.com/predictive-clinical-neuroscience/PCNtoolkit-demo/blob/main/tutorials/BLR_protocol/transfer_pretrained_normative_models.ipynb
+
             ### DATA PREPARATION ###
 #Import os and change directory to where braincharts folder should be located
 import os
