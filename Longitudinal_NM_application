@@ -1,3 +1,5 @@
+Based on script from PCNtoolkit: https://github.com/predictive-clinical-neuroscience/PCNtoolkit-demo/blob/main/tutorials/Long_NM/Long_NM_protocol.ipynb
+
                 ### 1. DATA PREPARATION ###
 
 # Create a conda environment
