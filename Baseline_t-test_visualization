@@ -1,3 +1,4 @@
+# Based on script from PCNtoolkit: https://github.com/amarquand/PCNtoolkit/blob/master/doc/source/pages/post_hoc_analysis.rst
 
             ### Mass univariate two sample t-test on deviation score maps ###
 #Import and install necessary libraries
